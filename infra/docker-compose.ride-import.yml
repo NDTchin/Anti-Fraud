@@ -1,0 +1,35 @@
+services:
+  neo4j-import:
+    command:
+      - neo4j
+      - --input-type=parquet
+      - --overwrite-destination=true
+      - --max-off-heap-memory=6G
+      - --nodes=Order=/import/neo4j-import-ride/headers/orders.csv,/import/neo4j-import-ride/nodes/orders.parquet
+      - --nodes=Customer=/import/neo4j-import-ride/headers/customers.csv,/import/neo4j-import-ride/nodes/customers.parquet
+      - --nodes=Driver=/import/neo4j-import-ride/headers/drivers.csv,/import/neo4j-import-ride/nodes/drivers.parquet
+      - --nodes=Address=/import/neo4j-import-ride/headers/addresses.csv,/import/neo4j-import-ride/nodes/addresses.parquet
+      - --nodes=PaymentMethod=/import/neo4j-import-ride/headers/payment_methods.csv,/import/neo4j-import-ride/nodes/payment_methods.parquet
+      - --nodes=PromotionCode=/import/neo4j-import-ride/headers/promotion_codes.csv,/import/neo4j-import-ride/nodes/promotion_codes.parquet
+      - --nodes=PromotionCampaign=/import/neo4j-import-ride/headers/promotion_campaigns.csv,/import/neo4j-import-ride/nodes/promotion_campaigns.parquet
+      - --nodes=CancelActor=/import/neo4j-import-ride/headers/cancel_actors.csv,/import/neo4j-import-ride/nodes/cancel_actors.parquet
+      - --nodes=CancelReason=/import/neo4j-import-ride/headers/cancel_reasons.csv,/import/neo4j-import-ride/nodes/cancel_reasons.parquet
+      - --nodes=RideService=/import/neo4j-import-ride/headers/ride_services.csv,/import/neo4j-import-ride/nodes/ride_services.parquet
+      - --nodes=ServiceType=/import/neo4j-import-ride/headers/service_types.csv,/import/neo4j-import-ride/nodes/service_types.parquet
+      - --nodes=SubVertical=/import/neo4j-import-ride/headers/sub_verticals.csv,/import/neo4j-import-ride/nodes/sub_verticals.parquet
+      - --nodes=TravelMode=/import/neo4j-import-ride/headers/travel_modes.csv,/import/neo4j-import-ride/nodes/travel_modes.parquet
+      - --nodes=ChannelType=/import/neo4j-import-ride/headers/channel_types.csv,/import/neo4j-import-ride/nodes/channel_types.parquet
+      - --relationships=PLACED=/import/neo4j-import-ride/headers/placed.csv,/import/neo4j-import-ride/relationships/placed.parquet
+      - --relationships=SERVED=/import/neo4j-import-ride/headers/served.csv,/import/neo4j-import-ride/relationships/served.parquet
+      - --relationships=PICKUP_AT=/import/neo4j-import-ride/headers/pickup_at.csv,/import/neo4j-import-ride/relationships/pickup_at.parquet
+      - --relationships=DROPOFF_AT=/import/neo4j-import-ride/headers/dropoff_at.csv,/import/neo4j-import-ride/relationships/dropoff_at.parquet
+      - --relationships=PAID_BY=/import/neo4j-import-ride/headers/paid_by.csv,/import/neo4j-import-ride/relationships/paid_by.parquet
+      - --relationships=USED_PROMO=/import/neo4j-import-ride/headers/used_promo.csv,/import/neo4j-import-ride/relationships/used_promo.parquet
+      - --relationships=IN_CAMPAIGN=/import/neo4j-import-ride/headers/in_campaign.csv,/import/neo4j-import-ride/relationships/in_campaign.parquet
+      - --relationships=CANCELLED_BY=/import/neo4j-import-ride/headers/cancelled_by.csv,/import/neo4j-import-ride/relationships/cancelled_by.parquet
+      - --relationships=HAS_CANCEL_REASON=/import/neo4j-import-ride/headers/has_cancel_reason.csv,/import/neo4j-import-ride/relationships/has_cancel_reason.parquet
+      - --relationships=USES_SERVICE=/import/neo4j-import-ride/headers/uses_service.csv,/import/neo4j-import-ride/relationships/uses_service.parquet
+      - --relationships=USES_SERVICE_TYPE=/import/neo4j-import-ride/headers/uses_service_type.csv,/import/neo4j-import-ride/relationships/uses_service_type.parquet
+      - --relationships=USES_SUB_VERTICAL=/import/neo4j-import-ride/headers/uses_sub_vertical.csv,/import/neo4j-import-ride/relationships/uses_sub_vertical.parquet
+      - --relationships=USES_TRAVEL_MODE=/import/neo4j-import-ride/headers/uses_travel_mode.csv,/import/neo4j-import-ride/relationships/uses_travel_mode.parquet
+      - --relationships=USES_CHANNEL_TYPE=/import/neo4j-import-ride/headers/uses_channel_type.csv,/import/neo4j-import-ride/relationships/uses_channel_type.parquet

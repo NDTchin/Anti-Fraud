@@ -1,0 +1,146 @@
+name: vsf-graph-fraud-dual
+
+services:
+  neo4j-food:
+    image: ${NEO4J_IMAGE:-neo4j:2026.06.0}
+    container_name: vsf-neo4j-food
+    restart: unless-stopped
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: ${NEO4J_USERNAME:-neo4j}/${NEO4J_PASSWORD:-change-me}
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*,gds.*
+      NEO4J_dbms_security_procedures_allowlist: apoc.*,gds.*
+      NEO4J_server_bolt_advertised__address: localhost:7687
+      NEO4J_server_http_advertised__address: localhost:7474
+      NEO4J_server_memory_heap_initial__size: 2G
+      NEO4J_server_memory_heap_max__size: 4G
+      NEO4J_server_memory_pagecache_size: 6G
+    volumes:
+      - "../data/neo4j-store-food/data:/data"
+      - "../data/neo4j-store-food/logs:/logs"
+      - "../data/neo4j-store-food/plugins:/plugins"
+      - "${NEO4J_IMPORT_DIR:-../data/neo4j-import}:/import:ro"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - cypher-shell -u ${NEO4J_USERNAME:-neo4j} -p ${NEO4J_PASSWORD:-change-me} "RETURN 1" >/dev/null 2>&1
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  neo4j-ride:
+    image: ${NEO4J_IMAGE:-neo4j:2026.06.0}
+    container_name: vsf-neo4j-ride
+    restart: unless-stopped
+    ports:
+      - "7475:7474"
+      - "7688:7687"
+    environment:
+      NEO4J_AUTH: ${NEO4J_USERNAME:-neo4j}/${NEO4J_PASSWORD:-change-me}
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*,gds.*
+      NEO4J_dbms_security_procedures_allowlist: apoc.*,gds.*
+      NEO4J_server_bolt_advertised__address: localhost:7688
+      NEO4J_server_http_advertised__address: localhost:7475
+      NEO4J_server_memory_heap_initial__size: 2G
+      NEO4J_server_memory_heap_max__size: 4G
+      NEO4J_server_memory_pagecache_size: 6G
+    volumes:
+      - "../data/neo4j-store-ride/data:/data"
+      - "../data/neo4j-store-ride/logs:/logs"
+      - "../data/neo4j-store-ride/plugins:/plugins"
+      - "${NEO4J_IMPORT_DIR:-../data/neo4j-import}:/import:ro"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - cypher-shell -u ${NEO4J_USERNAME:-neo4j} -p ${NEO4J_PASSWORD:-change-me} "RETURN 1" >/dev/null 2>&1
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  neo4j-import-food:
+    image: ${NEO4J_IMAGE:-neo4j:2026.06.0}
+    profiles: ["tools"]
+    entrypoint: ["neo4j-admin", "database", "import", "full"]
+    command:
+      - neo4j
+      - --input-type=parquet
+      - --overwrite-destination=true
+      - --max-off-heap-memory=6G
+      - --nodes=Order=/import/neo4j-import-food/headers/orders.csv,/import/neo4j-import-food/nodes/orders.parquet
+      - --nodes=Customer=/import/neo4j-import-food/headers/customers.csv,/import/neo4j-import-food/nodes/customers.parquet
+      - --nodes=Driver=/import/neo4j-import-food/headers/drivers.csv,/import/neo4j-import-food/nodes/drivers.parquet
+      - --nodes=Merchant=/import/neo4j-import-food/headers/merchants.csv,/import/neo4j-import-food/nodes/merchants.parquet
+      - --nodes=Address=/import/neo4j-import-food/headers/addresses.csv,/import/neo4j-import-food/nodes/addresses.parquet
+      - --nodes=PaymentMethod=/import/neo4j-import-food/headers/payment_methods.csv,/import/neo4j-import-food/nodes/payment_methods.parquet
+      - --nodes=PromotionCode=/import/neo4j-import-food/headers/promotion_codes.csv,/import/neo4j-import-food/nodes/promotion_codes.parquet
+      - --nodes=PromotionCampaign=/import/neo4j-import-food/headers/promotion_campaigns.csv,/import/neo4j-import-food/nodes/promotion_campaigns.parquet
+      - --nodes=CancelActor=/import/neo4j-import-food/headers/cancel_actors.csv,/import/neo4j-import-food/nodes/cancel_actors.parquet
+      - --nodes=CancelReason=/import/neo4j-import-food/headers/cancel_reasons.csv,/import/neo4j-import-food/nodes/cancel_reasons.parquet
+      - --nodes=DropoffFailActor=/import/neo4j-import-food/headers/dropoff_fail_actors.csv,/import/neo4j-import-food/nodes/dropoff_fail_actors.parquet
+      - --nodes=DropoffFailCode=/import/neo4j-import-food/headers/dropoff_fail_codes.csv,/import/neo4j-import-food/nodes/dropoff_fail_codes.parquet
+      - --relationships=PLACED=/import/neo4j-import-food/headers/placed.csv,/import/neo4j-import-food/relationships/placed.parquet
+      - --relationships=SERVED=/import/neo4j-import-food/headers/served.csv,/import/neo4j-import-food/relationships/served.parquet
+      - --relationships=FROM_MERCHANT=/import/neo4j-import-food/headers/from_merchant.csv,/import/neo4j-import-food/relationships/from_merchant.parquet
+      - --relationships=PICKUP_AT=/import/neo4j-import-food/headers/pickup_at.csv,/import/neo4j-import-food/relationships/pickup_at.parquet
+      - --relationships=DROPOFF_AT=/import/neo4j-import-food/headers/dropoff_at.csv,/import/neo4j-import-food/relationships/dropoff_at.parquet
+      - --relationships=PAID_BY=/import/neo4j-import-food/headers/paid_by.csv,/import/neo4j-import-food/relationships/paid_by.parquet
+      - --relationships=USED_PROMO=/import/neo4j-import-food/headers/used_promo.csv,/import/neo4j-import-food/relationships/used_promo.parquet
+      - --relationships=IN_CAMPAIGN=/import/neo4j-import-food/headers/in_campaign.csv,/import/neo4j-import-food/relationships/in_campaign.parquet
+      - --relationships=CANCELLED_BY=/import/neo4j-import-food/headers/cancelled_by.csv,/import/neo4j-import-food/relationships/cancelled_by.parquet
+      - --relationships=HAS_CANCEL_REASON=/import/neo4j-import-food/headers/has_cancel_reason.csv,/import/neo4j-import-food/relationships/has_cancel_reason.parquet
+      - --relationships=DROPOFF_FAILED_BY=/import/neo4j-import-food/headers/dropoff_failed_by.csv,/import/neo4j-import-food/relationships/dropoff_failed_by.parquet
+      - --relationships=HAS_DROPOFF_FAIL_CODE=/import/neo4j-import-food/headers/has_dropoff_fail_code.csv,/import/neo4j-import-food/relationships/has_dropoff_fail_code.parquet
+    volumes:
+      - "../data/neo4j-store-food/data:/data"
+      - "../data/neo4j-store-food/logs:/logs"
+      - "../data/neo4j-store-food/plugins:/plugins"
+      - "${NEO4J_IMPORT_DIR:-../data/neo4j-import}:/import:ro"
+
+  neo4j-import-ride:
+    image: ${NEO4J_IMAGE:-neo4j:2026.06.0}
+    profiles: ["tools"]
+    entrypoint: ["neo4j-admin", "database", "import", "full"]
+    command:
+      - neo4j
+      - --input-type=parquet
+      - --overwrite-destination=true
+      - --max-off-heap-memory=6G
+      - --nodes=Order=/import/neo4j-import-ride/headers/orders.csv,/import/neo4j-import-ride/nodes/orders.parquet
+      - --nodes=Customer=/import/neo4j-import-ride/headers/customers.csv,/import/neo4j-import-ride/nodes/customers.parquet
+      - --nodes=Driver=/import/neo4j-import-ride/headers/drivers.csv,/import/neo4j-import-ride/nodes/drivers.parquet
+      - --nodes=Address=/import/neo4j-import-ride/headers/addresses.csv,/import/neo4j-import-ride/nodes/addresses.parquet
+      - --nodes=PaymentMethod=/import/neo4j-import-ride/headers/payment_methods.csv,/import/neo4j-import-ride/nodes/payment_methods.parquet
+      - --nodes=PromotionCode=/import/neo4j-import-ride/headers/promotion_codes.csv,/import/neo4j-import-ride/nodes/promotion_codes.parquet
+      - --nodes=PromotionCampaign=/import/neo4j-import-ride/headers/promotion_campaigns.csv,/import/neo4j-import-ride/nodes/promotion_campaigns.parquet
+      - --nodes=CancelActor=/import/neo4j-import-ride/headers/cancel_actors.csv,/import/neo4j-import-ride/nodes/cancel_actors.parquet
+      - --nodes=CancelReason=/import/neo4j-import-ride/headers/cancel_reasons.csv,/import/neo4j-import-ride/nodes/cancel_reasons.parquet
+      - --nodes=RideService=/import/neo4j-import-ride/headers/ride_services.csv,/import/neo4j-import-ride/nodes/ride_services.parquet
+      - --nodes=ServiceType=/import/neo4j-import-ride/headers/service_types.csv,/import/neo4j-import-ride/nodes/service_types.parquet
+      - --nodes=SubVertical=/import/neo4j-import-ride/headers/sub_verticals.csv,/import/neo4j-import-ride/nodes/sub_verticals.parquet
+      - --nodes=TravelMode=/import/neo4j-import-ride/headers/travel_modes.csv,/import/neo4j-import-ride/nodes/travel_modes.parquet
+      - --nodes=ChannelType=/import/neo4j-import-ride/headers/channel_types.csv,/import/neo4j-import-ride/nodes/channel_types.parquet
+      - --relationships=PLACED=/import/neo4j-import-ride/headers/placed.csv,/import/neo4j-import-ride/relationships/placed.parquet
+      - --relationships=SERVED=/import/neo4j-import-ride/headers/served.csv,/import/neo4j-import-ride/relationships/served.parquet
+      - --relationships=PICKUP_AT=/import/neo4j-import-ride/headers/pickup_at.csv,/import/neo4j-import-ride/relationships/pickup_at.parquet
+      - --relationships=DROPOFF_AT=/import/neo4j-import-ride/headers/dropoff_at.csv,/import/neo4j-import-ride/relationships/dropoff_at.parquet
+      - --relationships=PAID_BY=/import/neo4j-import-ride/headers/paid_by.csv,/import/neo4j-import-ride/relationships/paid_by.parquet
+      - --relationships=USED_PROMO=/import/neo4j-import-ride/headers/used_promo.csv,/import/neo4j-import-ride/relationships/used_promo.parquet
+      - --relationships=IN_CAMPAIGN=/import/neo4j-import-ride/headers/in_campaign.csv,/import/neo4j-import-ride/relationships/in_campaign.parquet
+      - --relationships=CANCELLED_BY=/import/neo4j-import-ride/headers/cancelled_by.csv,/import/neo4j-import-ride/relationships/cancelled_by.parquet
+      - --relationships=HAS_CANCEL_REASON=/import/neo4j-import-ride/headers/has_cancel_reason.csv,/import/neo4j-import-ride/relationships/has_cancel_reason.parquet
+      - --relationships=USES_SERVICE=/import/neo4j-import-ride/headers/uses_service.csv,/import/neo4j-import-ride/relationships/uses_service.parquet
+      - --relationships=USES_SERVICE_TYPE=/import/neo4j-import-ride/headers/uses_service_type.csv,/import/neo4j-import-ride/relationships/uses_service_type.parquet
+      - --relationships=USES_SUB_VERTICAL=/import/neo4j-import-ride/headers/uses_sub_vertical.csv,/import/neo4j-import-ride/relationships/uses_sub_vertical.parquet
+      - --relationships=USES_TRAVEL_MODE=/import/neo4j-import-ride/headers/uses_travel_mode.csv,/import/neo4j-import-ride/relationships/uses_travel_mode.parquet
+      - --relationships=USES_CHANNEL_TYPE=/import/neo4j-import-ride/headers/uses_channel_type.csv,/import/neo4j-import-ride/relationships/uses_channel_type.parquet
+    volumes:
+      - "../data/neo4j-store-ride/data:/data"
+      - "../data/neo4j-store-ride/logs:/logs"
+      - "../data/neo4j-store-ride/plugins:/plugins"
+      - "${NEO4J_IMPORT_DIR:-../data/neo4j-import}:/import:ro"
