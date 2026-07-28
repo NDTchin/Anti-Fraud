@@ -1,0 +1,33 @@
+.venv/
+.vscode/
+.agents/
+.env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Generated data and local runtime files
+data/processed/*
+data/samples/*
+!data/processed/.gitkeep
+!data/samples/.gitkeep
+data/handoff/
+reports/
+logs/
+tmp_sql_test_*.db
+.tmp_push_repo/
+tmp_git_push_meta/
+data/neo4j-store*/
+data/neo4j-import/*
+!data/neo4j-import/.gitkeep
+!data/neo4j-import/.gitignore
+
+# Local docs and project scripts not intended for tracking
+docs/
+src/scoring/
+src/algorithms/
+scripts/

@@ -1,0 +1,31 @@
+﻿services:
+  neo4j-import:
+    command:
+      - neo4j
+      - --input-type=parquet
+      - --overwrite-destination=true
+      - --max-off-heap-memory=6G
+      - --nodes=Order=/import/neo4j-import-food/headers/orders.csv,/import/neo4j-import-food/nodes/orders.parquet
+      - --nodes=Customer=/import/neo4j-import-food/headers/customers.csv,/import/neo4j-import-food/nodes/customers.parquet
+      - --nodes=Driver=/import/neo4j-import-food/headers/drivers.csv,/import/neo4j-import-food/nodes/drivers.parquet
+      - --nodes=Merchant=/import/neo4j-import-food/headers/merchants.csv,/import/neo4j-import-food/nodes/merchants.parquet
+      - --nodes=Address=/import/neo4j-import-food/headers/addresses.csv,/import/neo4j-import-food/nodes/addresses.parquet
+      - --nodes=PaymentMethod=/import/neo4j-import-food/headers/payment_methods.csv,/import/neo4j-import-food/nodes/payment_methods.parquet
+      - --nodes=PromotionCode=/import/neo4j-import-food/headers/promotion_codes.csv,/import/neo4j-import-food/nodes/promotion_codes.parquet
+      - --nodes=PromotionCampaign=/import/neo4j-import-food/headers/promotion_campaigns.csv,/import/neo4j-import-food/nodes/promotion_campaigns.parquet
+      - --nodes=CancelActor=/import/neo4j-import-food/headers/cancel_actors.csv,/import/neo4j-import-food/nodes/cancel_actors.parquet
+      - --nodes=CancelReason=/import/neo4j-import-food/headers/cancel_reasons.csv,/import/neo4j-import-food/nodes/cancel_reasons.parquet
+      - --nodes=DropoffFailActor=/import/neo4j-import-food/headers/dropoff_fail_actors.csv,/import/neo4j-import-food/nodes/dropoff_fail_actors.parquet
+      - --nodes=DropoffFailCode=/import/neo4j-import-food/headers/dropoff_fail_codes.csv,/import/neo4j-import-food/nodes/dropoff_fail_codes.parquet
+      - --relationships=PLACED=/import/neo4j-import-food/headers/placed.csv,/import/neo4j-import-food/relationships/placed.parquet
+      - --relationships=SERVED=/import/neo4j-import-food/headers/served.csv,/import/neo4j-import-food/relationships/served.parquet
+      - --relationships=FROM_MERCHANT=/import/neo4j-import-food/headers/from_merchant.csv,/import/neo4j-import-food/relationships/from_merchant.parquet
+      - --relationships=PICKUP_AT=/import/neo4j-import-food/headers/pickup_at.csv,/import/neo4j-import-food/relationships/pickup_at.parquet
+      - --relationships=DROPOFF_AT=/import/neo4j-import-food/headers/dropoff_at.csv,/import/neo4j-import-food/relationships/dropoff_at.parquet
+      - --relationships=PAID_BY=/import/neo4j-import-food/headers/paid_by.csv,/import/neo4j-import-food/relationships/paid_by.parquet
+      - --relationships=USED_PROMO=/import/neo4j-import-food/headers/used_promo.csv,/import/neo4j-import-food/relationships/used_promo.parquet
+      - --relationships=IN_CAMPAIGN=/import/neo4j-import-food/headers/in_campaign.csv,/import/neo4j-import-food/relationships/in_campaign.parquet
+      - --relationships=CANCELLED_BY=/import/neo4j-import-food/headers/cancelled_by.csv,/import/neo4j-import-food/relationships/cancelled_by.parquet
+      - --relationships=HAS_CANCEL_REASON=/import/neo4j-import-food/headers/has_cancel_reason.csv,/import/neo4j-import-food/relationships/has_cancel_reason.parquet
+      - --relationships=DROPOFF_FAILED_BY=/import/neo4j-import-food/headers/dropoff_failed_by.csv,/import/neo4j-import-food/relationships/dropoff_failed_by.parquet
+      - --relationships=HAS_DROPOFF_FAIL_CODE=/import/neo4j-import-food/headers/has_dropoff_fail_code.csv,/import/neo4j-import-food/relationships/has_dropoff_fail_code.parquet
