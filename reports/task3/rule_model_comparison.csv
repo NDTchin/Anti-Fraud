@@ -1,2 +1,2 @@
-domain,rule_name,flagged_orders,flagged_customers,avg_rule_score,model_overlap_orders,model_overlap_rate,avg_anomaly_score
-ride,REPEATED_CUSTOMER_DRIVER,5785,370,24.323251512532412,0,0.0,0.0
+domain,rule_name,flagged_orders,flagged_customers,avg_rule_score,avg_graph_risk_score,model_overlap_orders,model_overlap_rate,avg_anomaly_score
+ride,REPEATED_CUSTOMER_DRIVER,5785,370,42.55915643906655,76.01624546240276,0,0.0,0.0
