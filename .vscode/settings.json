@@ -1,0 +1,8 @@
+{
+    "workbench.editorAssociations": {
+        "*.parquet": "default",
+        "*.csv": "duckdb.dataFileViewer",
+        "*.tsv": "duckdb.dataFileViewer",
+        "*.xlsx": "duckdb.dataFileViewer"
+    }
+}
