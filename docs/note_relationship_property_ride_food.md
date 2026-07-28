@@ -1,229 +1,378 @@
-# Phân Tích Cách Chia `note`, `relationship`, `property` Cho Dữ Liệu `ride` Và `food`
+# Báo Cáo Rà Soát `property` / `relationship` Cho Dữ Liệu `ride` Và `food`
 
-## Mục tiêu
+## Phạm vi rà soát
 
-Tài liệu này mô tả cách tách dữ liệu giữa:
+Tài liệu này được viết lại sau khi đối chiếu trực tiếp với implementation hiện tại của project, chủ yếu tại:
 
-- `property`: thuộc tính lưu trực tiếp trên node, chủ yếu là `Order`
-- `relationship`: liên kết giữa `Order` và các thực thể dùng lại nhiều lần
-- `note`: phần ghi chú phân tích, dùng để giải thích khác biệt mô hình giữa `ride` và `food`
+- `scripts/prepare_clean_orders_neo4j_import.py`
+- `scripts/initialize_neo4j.py`
+- `src/graph/cypher/001_constraints.cypher`
+- `tests/test_prepare_clean_orders_neo4j_import.py`
 
-Mục tiêu chính là giữ graph dễ đọc, tránh lặp dữ liệu, và thuận tiện cho các bài toán fraud detection trên Neo4j.
+Mục tiêu của báo cáo là mô tả đúng phần đang được thực thi trong project hiện tại, không dựa trên schema kỳ vọng hay định hướng tương lai.
 
-## Nguyên tắc chung
+## Kết luận nhanh
 
-### 1. Đưa vào `property` khi giá trị gắn chặt với một order
+Project hiện tại đang dùng mô hình `Order` làm node trung tâm cho cả `food` và `ride`.
 
-Một trường nên là `property` nếu:
+- Các trường mang tính metric, trạng thái, thời gian và một phần taxonomy dịch vụ đang được giữ trên node `Order` dưới dạng `property`.
+- Các thực thể dùng chung giữa nhiều order đang được tách ra thành node riêng và nối bằng `relationship`.
+- Một số trường hiện được lưu đồng thời theo cả hai cách:
+  - vừa là `property` trên `Order`
+  - vừa là `relationship` sang node chuẩn hóa
 
-- chỉ có ý nghĩa trong phạm vi một order
-- ít được dùng để nối nhiều order với nhau
-- thường được dùng để filter, sort, scoring, dashboard
-- giá trị biến động theo từng order
+Điều này đang xảy ra với các nhóm như:
 
-Ví dụ:
+- `cancel_by`
+- `cancel_description`
+- `service_name`
+- `service_type`
+- `sub_vertical_name`
+- `travel_mode`
+- `channel_type`
 
-- `gmv`
-- `discount`
-- `food_total_paid`
-- `declared_km`
-- `actual_km`
-- `lead_time_second`
+Nói cách khác, implementation hiện tại không tách hoàn toàn theo kiểu “chỉ property” hoặc “chỉ relationship”, mà đang dùng mô hình lai để vừa tiện filter/dashboard, vừa tiện graph traversal.
+
+## 1. Những gì đang là `property` trên node `Order`
+
+Theo `ORDER_FIELDS` trong `scripts/prepare_clean_orders_neo4j_import.py`, node `Order` hiện giữ các nhóm thuộc tính sau.
+
+### 1.1. Định danh và thời gian
+
+- `order_id`
+- `domain`
+- `order_time`
+- `completed_at`
+- `order_hour`
+- `order_weekday`
+
+Ghi chú:
+
+- `order_time_local_tz` và `complete_time_local_tz` được chuẩn hóa sang định dạng `YYYY-MM-DDTHH:MM:SS` trước khi ghi ra file import.
+
+### 1.2. Trạng thái và cờ nghiệp vụ
+
+- `status`
+- `cancel_by`
+- `cancel_description`
+- `is_now_order`
+- `is_schedule_order`
 - `is_completed`
 - `is_cancelled`
-- `order_time`
-- `order_hour`
+- `has_promotion`
+- `has_dropoff_fail`
 
-Các trường này hiện phù hợp để đặt trên node `Order`.
+### 1.3. Taxonomy dịch vụ
 
-### 2. Đưa vào `relationship` khi giá trị là một thực thể dùng chung
+- `service_name`
+- `service_type`
+- `sub_vertical_name`
+- `vertical_name`
+- `travel_mode`
+- `channel_type`
+- `food_dispatch_type`
 
-Một trường nên tách thành node riêng và nối qua `relationship` nếu:
+Điểm quan trọng:
 
-- nhiều order có thể cùng tham chiếu tới một giá trị
-- giá trị đó là tín hiệu để nối cụm nghi vấn
-- cần đếm mức độ dùng chung giữa nhiều customer, driver, order
-- cần truy vấn theo pattern graph thay vì chỉ lọc theo cột
+- `vertical_name` hiện chỉ là `property`, chưa được tách thành node/relationship.
+- Các trường còn lại trong nhóm taxonomy có mặt cả ở `property` lẫn `relationship`.
 
-Ví dụ:
+### 1.4. Metric tài chính và vận hành
 
-- `customer_id` -> `(:Customer)-[:PLACED]->(:Order)`
-- `driver_id` -> `(:Driver)-[:SERVED]->(:Order)`
-- `merchant_id` -> `(:Order)-[:FROM_MERCHANT]->(:Merchant)`
-- `payment_method` -> `(:Order)-[:PAID_BY]->(:PaymentMethod)`
-- `promotion_code` -> `(:Order)-[:USED_PROMO]->(:PromotionCode)`
-- `promotion_campaign_code` -> `(:PromotionCode)-[:IN_CAMPAIGN]->(:PromotionCampaign)`
-- địa chỉ pickup/dropoff -> `(:Order)-[:PICKUP_AT|DROPOFF_AT]->(:Address)`
-
-Đây là nhóm tín hiệu mạnh để tìm shared entities, collusion ring, promo abuse, account farming.
-
-### 3. Giữ `note` cho phần giải thích nghiệp vụ, không dùng thay cho schema
-
-`note` không nên là nơi chứa dữ liệu lõi để phân tích graph.
-
-`note` chỉ nên dùng cho:
-
-- giải thích vì sao một field được đặt ở `property` hay `relationship`
-- mô tả field nào chỉ có ở `food` hoặc chỉ có ở `ride`
-- ghi lại giả định mapping khi raw data chưa đồng nhất
-- nêu các rủi ro false positive hoặc data quality
-
-Nếu một thông tin cần dùng để query, score, detect hoặc visualize nhiều lần thì không nên chỉ nằm trong `note`.
-
-## Cách chia theo thực thể hiện tại
-
-## `Order` làm node trung tâm
-
-Node `Order` nên là trung tâm của cả hai domain vì:
-
-- mọi hành vi fraud cuối cùng vẫn quy về một giao dịch
-- dễ giữ chung một pattern cho `food` và `ride`
-- tiện mở rộng dashboard và feature engineering
-
-Các `property` đang hợp lý trên `Order`:
-
-- định danh và thời gian: `order_id`, `domain`, `order_time`, `completed_at`, `order_hour`, `order_weekday`
-- trạng thái: `status`, `is_completed`, `is_cancelled`, `cancel_by`, `cancel_description`
-- tiền: `gmv`, `commission`, `net_income`, `discount`, `delivery_discount`
-- food-specific metric: `food_gmv`, `food_total_paid`, `food_total_item_quantity`, `food_dispatch_type`
-- ride-specific metric: `declared_km`, `actual_km`, `km_diff`, `intrip_time_second`
-- ngữ cảnh đơn hàng: `is_now_order`, `is_schedule_order`, `has_promotion`, `has_dropoff_fail`
-- phân loại dịch vụ: `service_name`, `service_type`, `sub_vertical_name`, `vertical_name`, `travel_mode`, `channel_type`
-- rating: `rate_by_customer`, `rate_by_driver`
-
-## Nhóm `relationship` dùng chung cho cả hai domain
-
-Các quan hệ chung nên giữ thống nhất giữa `ride` và `food`:
-
-| Relationship | Ý nghĩa |
-|---|---|
-| `PLACED` | customer tạo order |
-| `SERVED` | driver phục vụ order |
-| `PICKUP_AT` | điểm lấy hàng hoặc đón khách |
-| `DROPOFF_AT` | điểm giao hàng hoặc trả khách |
-| `PAID_BY` | phương thức thanh toán |
-| `USED_PROMO` | mã khuyến mãi được dùng |
-| `IN_CAMPAIGN` | promo code thuộc campaign nào |
-| `CANCELLED_BY` | actor gây hủy |
-| `HAS_CANCEL_REASON` | lý do hủy |
-
-Lợi ích của nhóm quan hệ chung:
-
-- thống nhất cách viết query liên domain
-- tái sử dụng rule và dashboard
-- giảm số lượng schema đặc thù không cần thiết
-
-## Nhóm `relationship` đặc thù `food`
-
-`food` có thêm thực thể merchant và lỗi giao đồ ăn:
-
-| Relationship | Ý nghĩa |
-|---|---|
-| `FROM_MERCHANT` | order đến từ merchant nào |
-| `DROPOFF_FAILED_BY` | actor gây lỗi giao đồ ăn |
-| `HAS_DROPOFF_FAIL_CODE` | mã lỗi giao đồ ăn |
-
-Khuyến nghị:
-
-- `merchant_id` nên là node riêng vì có tính share rất mạnh giữa nhiều order
-- `food_dropoff_fail_by` và `food_dropoff_fail_code` nên là node riêng nếu team muốn truy vết cụm issue hoặc abuse theo loại lỗi
-
-## Nhóm `relationship` đặc thù `ride`
-
-`ride` có thêm nhóm phân loại dịch vụ:
-
-| Relationship | Ý nghĩa |
-|---|---|
-| `USES_SERVICE` | order dùng service nào |
-| `USES_SERVICE_TYPE` | thuộc loại service nào |
-| `USES_SUB_VERTICAL` | thuộc sub-vertical nào |
-| `USES_TRAVEL_MODE` | travel mode nào |
-| `USES_CHANNEL_TYPE` | order đi qua channel nào |
-
-Khuyến nghị:
-
-- vẫn có thể giữ các field này trên `Order` để filter nhanh
-- đồng thời tạo node + relationship nếu muốn phân tích mật độ dùng chung và cấu trúc cụm theo loại dịch vụ
-
-Nói cách khác, đây là nhóm dữ liệu có thể xuất hiện ở cả `property` lẫn `relationship` mà không mâu thuẫn, vì hai mục đích khác nhau:
-
-- `property`: phục vụ dashboard, export, scoring
-- `relationship`: phục vụ graph traversal và pattern detection
-
-## Khi nào không nên tách ra node riêng
-
-Không nên tách ra node riêng nếu field:
-
-- cardinality quá cao và gần như 1-1 với order
-- ít giá trị phân tích dùng chung
-- chỉ phục vụ hiển thị chi tiết
-- làm graph phình lớn nhưng ít giá trị kết nối
-
-Ví dụ thường nên giữ ở `property`:
-
-- `gmv`
-- `net_income`
-- `lead_time_second`
+- `declared_km`
+- `actual_km`
+- `km_diff`
 - `intrip_time_second`
+- `lead_time_second`
+- `gmv`
+- `commission`
+- `net_income`
+- `discount`
+- `delivery_discount`
+- `food_gmv`
+- `food_total_paid`
+- `food_total_item_quantity`
+
+### 1.5. Rating
+
 - `rate_by_customer`
 - `rate_by_driver`
 
-## Gợi ý sử dụng `note`
+## 2. Những gì đang được tách thành node riêng
 
-Nếu cần thêm cột hoặc tài liệu `note`, nên chia thành 3 nhóm:
+Từ `HEADERS` và phần ghi node output, project hiện đang tạo các node sau:
 
-| Nhóm note | Nội dung |
-|---|---|
-| `modeling_note` | lý do chọn property hay relationship |
-| `domain_note` | field chỉ áp dụng cho ride hoặc food |
-| `quality_note` | thiếu dữ liệu, null rate cao, mapping còn giả định |
+- `Order`
+- `Customer`
+- `Driver`
+- `Merchant`
+- `Address`
+- `PaymentMethod`
+- `PromotionCode`
+- `PromotionCampaign`
+- `CancelActor`
+- `CancelReason`
+- `DropoffFailActor`
+- `DropoffFailCode`
+- `RideService`
+- `ServiceType`
+- `SubVertical`
+- `TravelMode`
+- `ChannelType`
 
-Ví dụ:
+Ghi chú:
 
-| Field | Kiểu lưu | Note |
-|---|---|---|
-| `merchant_id` | `relationship` | Chỉ áp dụng cho `food`, là shared entity mạnh để gom cụm merchant abuse |
-| `actual_km` | `property` | Chỉ áp dụng cho `ride`, chủ yếu dùng tính feature chứ không tạo shared graph entity |
-| `promotion_code` | `relationship` | Dùng chung nhiều order, rất quan trọng cho promo abuse |
-| `cancel_description` | `relationship` + `property` | Có thể giữ text trên order để đọc nhanh, đồng thời nối sang `CancelReason` để thống kê |
+- `Merchant` chủ yếu có ý nghĩa cho `food`, nhưng importer vẫn hỗ trợ thống nhất trong một pipeline.
+- Các node taxonomy của ride hiện không chỉ dành riêng cho `ride`; importer vẫn ghi chúng nếu cột nguồn có dữ liệu.
 
-## Đề xuất thực hành cho dự án này
+## 3. Những `relationship` đang thực sự được tạo
 
-### Nên giữ làm `property`
+Project hiện đang ghi các file relationship sau:
 
-- toàn bộ metric số học theo order
-- cờ boolean theo trạng thái order
-- timestamp và time bucket
-- các field cần hiển thị trực tiếp trên dashboard
+- `PLACED`
+- `SERVED`
+- `FROM_MERCHANT`
+- `PICKUP_AT`
+- `DROPOFF_AT`
+- `PAID_BY`
+- `USED_PROMO`
+- `IN_CAMPAIGN`
+- `CANCELLED_BY`
+- `HAS_CANCEL_REASON`
+- `DROPOFF_FAILED_BY`
+- `HAS_DROPOFF_FAIL_CODE`
+- `USES_SERVICE`
+- `USES_SERVICE_TYPE`
+- `USES_SUB_VERTICAL`
+- `USES_TRAVEL_MODE`
+- `USES_CHANNEL_TYPE`
 
-### Nên giữ làm `relationship`
+Hướng nối hiện tại:
 
-- customer
-- driver
-- merchant
-- payment method
-- promotion code
-- promotion campaign
-- address pickup/dropoff
-- cancel actor
-- cancel reason
-- dropoff fail actor/code
-- service taxonomy của ride khi cần graph analysis
+- `(:Customer)-[:PLACED]->(:Order)`
+- `(:Driver)-[:SERVED]->(:Order)`
+- `(:Order)-[:FROM_MERCHANT]->(:Merchant)`
+- `(:Order)-[:PICKUP_AT]->(:Address)`
+- `(:Order)-[:DROPOFF_AT]->(:Address)`
+- `(:Order)-[:PAID_BY]->(:PaymentMethod)`
+- `(:Order)-[:USED_PROMO]->(:PromotionCode)`
+- `(:PromotionCode)-[:IN_CAMPAIGN]->(:PromotionCampaign)`
+- `(:Order)-[:CANCELLED_BY]->(:CancelActor)`
+- `(:Order)-[:HAS_CANCEL_REASON]->(:CancelReason)`
+- `(:Order)-[:DROPOFF_FAILED_BY]->(:DropoffFailActor)`
+- `(:Order)-[:HAS_DROPOFF_FAIL_CODE]->(:DropoffFailCode)`
+- `(:Order)-[:USES_SERVICE]->(:RideService)`
+- `(:Order)-[:USES_SERVICE_TYPE]->(:ServiceType)`
+- `(:Order)-[:USES_SUB_VERTICAL]->(:SubVertical)`
+- `(:Order)-[:USES_TRAVEL_MODE]->(:TravelMode)`
+- `(:Order)-[:USES_CHANNEL_TYPE]->(:ChannelType)`
 
-### Nên giữ làm `note`
+## 4. Các nhóm dữ liệu đang dùng mô hình lai
 
-- giải thích business meaning của field
-- khác biệt coverage giữa `food` và `ride`
-- giả định chuẩn hóa dữ liệu
-- cảnh báo field đang null nhiều hoặc chưa ổn định
+Đây là phần khác biệt quan trọng nhất so với cách hiểu “property hoặc relationship”.
 
-## Kết luận
+### 4.1. Nhóm cancel
 
-Với dữ liệu `ride` và `food`, cách chia hợp lý nhất là:
+Hiện tại:
 
-- dùng `Order` làm node trung tâm
-- giữ các metric và trạng thái theo giao dịch ở `property`
-- tách các thực thể dùng chung, có khả năng nối nhiều order, sang `relationship`
-- dùng `note` để giải thích quyết định mô hình và khác biệt domain, không dùng `note` thay cho dữ liệu phân tích
+- `cancel_by` nằm trên `Order.status context` dưới dạng property
+- đồng thời tạo node `CancelActor` và quan hệ `CANCELLED_BY`
 
-Cách chia này vừa bám sát importer hiện tại, vừa hỗ trợ tốt cho fraud graph, dashboard, và mở rộng schema sau này.
+- `cancel_description` nằm trên `Order`
+- đồng thời tạo node `CancelReason` và quan hệ `HAS_CANCEL_REASON`
+
+Ý nghĩa:
+
+- thuận tiện cho dashboard và export vì vẫn đọc được ngay trên `Order`
+- vẫn có thể group/traverse theo actor hoặc reason trong graph
+
+### 4.2. Nhóm service taxonomy
+
+Các trường sau đều đang xuất hiện ở cả hai lớp:
+
+- `service_name`
+- `service_type`
+- `sub_vertical_name`
+- `travel_mode`
+- `channel_type`
+
+Hiện trạng này phù hợp với mục tiêu:
+
+- `property` để lọc nhanh, hiển thị, làm feature
+- `relationship` để gom cụm hoặc phân tích shared structure
+
+### 4.3. Khác biệt trong cùng nhóm taxonomy
+
+`vertical_name` là ngoại lệ:
+
+- hiện chỉ được giữ trên `Order`
+- chưa có node `Vertical` hay quan hệ kiểu `USES_VERTICAL`
+
+Nếu sau này cần graph analysis theo `vertical_name`, đây là phần chưa được triển khai.
+
+## 5. Những gì không nằm trên `Order` trong implementation hiện tại
+
+Một số field quan trọng đang được tách sang node/relationship và không được giữ lại trên node `Order` trong output import:
+
+- `customer_id`
+- `driver_id`
+- `merchant_id`
+- `payment_method`
+- `promotion_code`
+- `promotion_campaign_code`
+- `food_dropoff_fail_by`
+- `food_dropoff_fail_code`
+- thông tin địa chỉ pickup/dropoff dạng raw
+
+Điểm này quan trọng vì note cũ dễ tạo cảm giác rằng một số field có thể vừa giữ trên `Order` vừa không. Với implementation hiện tại thì:
+
+- các field trên được dùng để tạo node/relationship
+- nhưng không nằm trong danh sách `ORDER_FIELDS`
+- nên không trở thành property của node `Order` sau bước import này
+
+## 6. Khác biệt giữa `food` và `ride` trong implementation hiện tại
+
+### 6.1. Nhóm thiên về `food`
+
+Thường chỉ có dữ liệu thực tế cho:
+
+- `merchant_id`
+- `food_dispatch_type`
+- `food_gmv`
+- `food_total_paid`
+- `food_total_item_quantity`
+- `food_dropoff_fail_by`
+- `food_dropoff_fail_code`
+
+Tương ứng, `food` là domain hưởng lợi rõ nhất từ:
+
+- `FROM_MERCHANT`
+- `DROPOFF_FAILED_BY`
+- `HAS_DROPOFF_FAIL_CODE`
+
+### 6.2. Nhóm thiên về `ride`
+
+Thường gắn mạnh với:
+
+- `declared_km`
+- `actual_km`
+- `km_diff`
+- `intrip_time_second`
+- `travel_mode`
+- `service_name`
+- `service_type`
+- `sub_vertical_name`
+- `channel_type`
+
+Tương ứng, `ride` là domain hưởng lợi rõ nhất từ:
+
+- `USES_SERVICE`
+- `USES_SERVICE_TYPE`
+- `USES_SUB_VERTICAL`
+- `USES_TRAVEL_MODE`
+- `USES_CHANNEL_TYPE`
+
+### 6.3. Phần chung giữa hai domain
+
+Cả `food` và `ride` đang dùng chung các cấu phần cốt lõi:
+
+- `Order`
+- `Customer`
+- `Driver`
+- `Address`
+- `PaymentMethod`
+- `PromotionCode`
+- `PromotionCampaign`
+- `PLACED`
+- `SERVED`
+- `PICKUP_AT`
+- `DROPOFF_AT`
+- `PAID_BY`
+- `USED_PROMO`
+- `IN_CAMPAIGN`
+
+## 7. Chuẩn hóa địa chỉ đang được làm như thế nào
+
+Địa chỉ không được giữ nguyên như một ID nguồn mà đang được chuẩn hóa theo quy trình:
+
+1. Chuẩn hóa Unicode bằng `NFKC`
+2. `casefold`
+3. trim khoảng trắng
+4. co cụm khoảng trắng lặp
+5. ghép `province | district | address`
+6. băm SHA-1 để tạo `address_key`
+
+Ý nghĩa:
+
+- cùng một địa chỉ viết khác format vẫn có thể map về cùng một `Address`
+- graph giảm trùng node địa chỉ
+
+Lưu ý:
+
+- nếu thiếu text địa chỉ gốc thì sẽ không tạo `Address` node/relationship
+
+## 8. Data quality check đang có thật trong code
+
+Phần này cần tách bạch với mong muốn nghiệp vụ.
+
+Hiện tại `quality_report()` mới kiểm tra 4 điều:
+
+- thiếu `order_id`
+- thiếu `customer_id`
+- thiếu `order_time_local_tz`
+- trùng `order_id`
+
+Vì vậy:
+
+- các kiểm tra như numeric invalid, empty shared signal, missing anomaly score, missing rule field
+- hiện chưa có trong importer này
+
+Nếu tài liệu muốn mô tả “đang chạy trong project”, thì không nên ghi các check đó như thể đã được thực thi.
+
+## 9. Những điểm tài liệu cũ cần chỉnh lại
+
+Sau khi đối chiếu code, các điểm sau cần sửa trong cách mô tả:
+
+### 9.1. Không nên mô tả `note` như một thành phần schema đang được triển khai
+
+Trong code hiện tại:
+
+- không có cấu trúc lưu `modeling_note`, `domain_note`, `quality_note`
+- `note` chỉ nên được hiểu là tài liệu giải thích, không phải output dữ liệu của importer
+
+### 9.2. Không nên ghi các entity chưa có implementation như thể đã tồn tại
+
+Hiện chưa thấy importer này tạo:
+
+- `Rule`
+- `ModelScore`
+- `FLAGGED_BY`
+- `SCORED_BY`
+
+Các entity đó có thể thuộc lớp enrichment/storytelling khác, nhưng không phải phần import order graph cơ sở hiện tại.
+
+### 9.3. Cần nêu rõ mô hình lai thay vì chia cứng
+
+Thực tế hiện tại là:
+
+- có nhóm “chỉ property”
+- có nhóm “chỉ relationship”
+- có nhóm “property + relationship song song”
+
+Đây là mô tả đúng hơn so với phân loại nhị phân đơn giản.
+
+## 10. Kết luận cuối cùng
+
+Nếu bám đúng implementation hiện tại của project, có thể chốt như sau:
+
+- `Order` là node trung tâm cho cả `food` và `ride`
+- metric, thời gian, trạng thái và một phần taxonomy đang nằm trên `Order` dưới dạng `property`
+- customer, driver, merchant, promo, payment, address và nhiều shared entity khác đang được tách sang node riêng
+- một số nhóm quan trọng như cancel và service taxonomy đang được lưu theo mô hình lai: vừa property vừa relationship
+- `note` hiện chỉ nên là tài liệu mô tả quyết định modeling, không phải thành phần dữ liệu của pipeline import
+
+Vì vậy, báo cáo đúng với trạng thái project hiện tại không nên viết theo hướng “nên làm gì” là chính, mà nên ghi rõ:
+
+- phần nào đã triển khai
+- phần nào đang là giả định
+- phần nào vẫn chưa có trong importer hiện tại
