@@ -13,5 +13,8 @@ data/processed/*
 data/samples/*
 !data/processed/.gitkeep
 !data/samples/.gitkeep
+data/handoff/
+data/neo4j-store/
 logs/
+tmp_sql_test_*.db
 
