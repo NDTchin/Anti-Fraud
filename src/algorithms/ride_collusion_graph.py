@@ -7,6 +7,9 @@ import numpy as np
 import pandas as pd
 
 
+COMPLETED_STATUSES = {"COMPLETED"}
+
+
 @dataclass(frozen=True)
 class RideCollusionGraphConfig:
     extreme_trip_quantile: float = 0.9999
@@ -22,6 +25,10 @@ def ensure_datetime(series: pd.Series) -> pd.Series:
     if pd.api.types.is_numeric_dtype(series):
         return pd.to_datetime(series, unit="s", errors="coerce")
     return pd.to_datetime(series, errors="coerce")
+
+
+def is_completed_status(series: pd.Series) -> pd.Series:
+    return series.astype("string").str.strip().str.upper().isin(COMPLETED_STATUSES)
 
 
 def load_ride_orders(path: str | Path) -> pd.DataFrame:
@@ -45,9 +52,7 @@ def load_ride_orders(path: str | Path) -> pd.DataFrame:
         "discount",
         "promotion_code",
         "payment_method",
-        "source_file_date",
         "order_date",
-        "is_cancelled",
     ]
     frame = pd.read_parquet(path, columns=columns).copy()
     return frame.assign(
@@ -63,7 +68,7 @@ def prepare_active_orders(frame: pd.DataFrame) -> pd.DataFrame:
         frame["driver_id"].notna()
         & frame["customer_id"].notna()
         & frame["order_time_local_tz"].notna()
-        & frame["is_cancelled"].fillna(0).eq(0)
+        & is_completed_status(frame["order_status"])
     ].copy()
     active = active.assign(
         avg_kmh=pd.to_numeric(active["avg_kmh"], errors="coerce"),

@@ -6,6 +6,7 @@
 )
 
 $ErrorActionPreference = "Stop"
+throw "Food import is temporarily disabled. Use scripts\\run_ride_import.ps1 while the project is focused on ride only."
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $Python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $ComposeFile = Join-Path $ProjectRoot "infra\docker-compose.full.yml"

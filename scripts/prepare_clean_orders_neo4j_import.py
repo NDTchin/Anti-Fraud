@@ -20,6 +20,10 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 
+GENERATED_DIRECTORIES = ("headers", "nodes", "relationships")
+COMPLETED_STATUSES = {"COMPLETED"}
+
+
 ORDER_FIELDS: list[tuple[str, str]] = [
     ("order_id:ID(Order-ID)", "order_id"),
     ("domain:string", "domain"),
@@ -38,12 +42,11 @@ ORDER_FIELDS: list[tuple[str, str]] = [
     ("is_now_order:boolean", "is_now_order"),
     ("is_schedule_order:boolean", "is_schedule_order"),
     ("is_completed:boolean", "is_completed"),
-    ("is_cancelled:boolean", "is_cancelled"),
     ("has_promotion:boolean", "has_promotion"),
     ("has_dropoff_fail:boolean", "has_dropoff_fail"),
     ("declared_km:double", "declared_km"),
     ("actual_km:double", "actual_km"),
-    ("km_diff:double", "km_diff"),
+    ("km_ratio:double", "km_ratio"),
     ("intrip_time_second:long", "intrip_time_second"),
     ("lead_time_second:long", "lead_time_second"),
     ("gmv:double", "gmv"),
@@ -209,7 +212,7 @@ def parse_args() -> argparse.Namespace:
         "--sql-table",
         help="Table name used when reading directly from a SQL source",
     )
-    parser.add_argument("--domain", choices=("food", "ride"), default="food")
+    parser.add_argument("--domain", choices=("food", "ride"), default="ride")
     parser.add_argument("--output", type=Path, default=Path("data/neo4j-import/neo4j-import-output"))
     parser.add_argument("--batch-size", type=int, default=100_000)
     parser.add_argument("--minimum-free-gb", type=float, default=2.0)
@@ -229,6 +232,12 @@ def display(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def is_completed_status(value: object) -> bool:
+    if value is None or pd.isna(value):
+        return False
+    return str(value).strip().upper() in COMPLETED_STATUSES
 
 
 def clean_id_values(series: pd.Series) -> set[str]:
@@ -293,27 +302,112 @@ def write_node_file(path: Path, data: dict[str, list[object]]) -> int:
     return table.num_rows
 
 
-def prepare_directories(output: Path, overwrite: bool) -> tuple[Path, Path]:
+def generated_paths(root: Path) -> list[Path]:
+    return [root / name for name in GENERATED_DIRECTORIES]
+
+
+def prepare_directories(output: Path, overwrite: bool) -> tuple[Path, Path, Path, bool]:
     marker = output / ".vsf-clean-orders-graph-import"
-    generated = [output / "headers", output / "nodes", output / "relationships"]
-    if any(path.exists() for path in generated):
-        if not overwrite:
-            raise FileExistsError(
-                f"Generated import files already exist in {output}; use --overwrite"
-            )
-        if not marker.exists():
-            raise RuntimeError(f"Refusing to overwrite unrecognized directory: {output}")
+    generated = generated_paths(output)
+    has_existing = any(path.exists() for path in generated)
+    append_mode = has_existing and not overwrite
+    if has_existing and not marker.exists():
+        raise RuntimeError(f"Refusing to reuse unrecognized directory: {output}")
+    if overwrite:
         for path in generated:
             if path.exists():
                 shutil.rmtree(path)
-    headers = output / "headers"
-    nodes = output / "nodes"
-    relationships = output / "relationships"
+
+    temp_output = output / ".tmp_prepare_clean_orders"
+    if temp_output.exists():
+        shutil.rmtree(temp_output)
+    headers = temp_output / "headers"
+    nodes = temp_output / "nodes"
+    relationships = temp_output / "relationships"
     nodes.mkdir(parents=True, exist_ok=True)
     relationships.mkdir(parents=True, exist_ok=True)
-    marker.touch()
     write_headers(headers)
-    return nodes, relationships
+    return temp_output, nodes, relationships, append_mode
+
+
+def finalize_output(output: Path, temp_output: Path) -> None:
+    marker = output / ".vsf-clean-orders-graph-import"
+    for path in generated_paths(output):
+        if path.exists():
+            shutil.rmtree(path)
+    for name in GENERATED_DIRECTORIES:
+        shutil.move(str(temp_output / name), str(output / name))
+    shutil.rmtree(temp_output, ignore_errors=True)
+    marker.touch()
+
+
+def read_existing_values(path: Path, column: str) -> set[str]:
+    if not path.exists():
+        return set()
+    table = pq.read_table(path, columns=[column])
+    return clean_id_values(table[column].to_pandas())
+
+
+def read_existing_pairs(path: Path, left: str, right: str) -> set[tuple[str, str]]:
+    if not path.exists():
+        return set()
+    frame = pq.read_table(path, columns=[left, right]).to_pandas()
+    pairs: set[tuple[str, str]] = set()
+    for left_value, right_value in frame.itertuples(index=False, name=None):
+        left_text = display(left_value)
+        right_text = display(right_value)
+        if left_text and right_text:
+            pairs.add((left_text, right_text))
+    return pairs
+
+
+def read_existing_addresses(
+    path: Path,
+) -> tuple[dict[str, tuple[str | None, str | None, str | None, str]], dict[str, str]]:
+    addresses: dict[str, tuple[str | None, str | None, str | None, str]] = {}
+    cache: dict[str, str] = {}
+    if not path.exists():
+        return addresses, cache
+    frame = pq.read_table(path).to_pandas()
+    for address_key, address, district, province in frame.itertuples(index=False, name=None):
+        canonical = "|".join((normalize(province), normalize(district), normalize(address)))
+        if not canonical.strip("|"):
+            continue
+        key_text = str(address_key)
+        addresses[key_text] = (
+            display(address),
+            display(district),
+            display(province),
+            canonical,
+        )
+        cache[canonical] = key_text
+    return addresses, cache
+
+
+def copy_existing_parquet(path: Path, sink: ParquetSink) -> None:
+    if not path.exists():
+        return
+    parquet_file = pq.ParquetFile(path)
+    for batch in parquet_file.iter_batches(batch_size=100_000, use_threads=True):
+        sink.write(batch.to_pandas())
+
+
+def deduplicate_new_orders(
+    frame: pd.DataFrame,
+    existing_order_ids: set[str],
+) -> tuple[pd.DataFrame, set[str]]:
+    if "order_id" not in frame.columns:
+        return frame.iloc[0:0].copy(), set()
+    working = frame.copy()
+    working["order_id"] = working["order_id"].astype("string").str.strip()
+    working = working[working["order_id"].notna() & working["order_id"].ne("")].copy()
+    if working.empty:
+        return working, set()
+    working = working[~working["order_id"].isin(existing_order_ids)].copy()
+    if working.empty:
+        return working, set()
+    working = working.drop_duplicates(subset=["order_id"], keep="first")
+    return working, set(working["order_id"].astype(str))
 
 
 def read_sql_source(
@@ -394,6 +488,14 @@ def add_missing_columns(frame: pd.DataFrame, columns: list[str]) -> pd.DataFrame
 def normalize_order_frame(frame: pd.DataFrame, domain: str) -> pd.DataFrame:
     frame = frame.copy()
     frame["domain"] = domain
+    if "km_ratio" not in frame.columns and "km_diff" in frame.columns:
+        frame["km_ratio"] = frame["km_diff"]
+    if "is_completed" not in frame.columns:
+        status_series = frame.get("order_status", pd.Series(pd.NA, index=frame.index))
+        frame["is_completed"] = status_series.map(is_completed_status)
+    if "has_promotion" not in frame.columns:
+        promo_series = frame.get("promotion_code", pd.Series(pd.NA, index=frame.index))
+        frame["has_promotion"] = promo_series.astype("string").str.strip().fillna("").ne("")
     target_columns = [source for _, source in ORDER_FIELDS]
     add_missing_columns(frame, target_columns)
     for column in (
@@ -406,7 +508,6 @@ def normalize_order_frame(frame: pd.DataFrame, domain: str) -> pd.DataFrame:
         "is_now_order",
         "is_schedule_order",
         "is_completed",
-        "is_cancelled",
         "has_promotion",
         "has_dropoff_fail",
     ]
@@ -451,7 +552,9 @@ def main() -> int:
     if expected_rows <= 0:
         raise RuntimeError("Source data is empty")
 
-    nodes_dir, relationships_dir = prepare_directories(output, args.overwrite)
+    temp_output, nodes_dir, relationships_dir, append_mode = prepare_directories(output, args.overwrite)
+    existing_nodes_dir = output / "nodes"
+    existing_relationships_dir = output / "relationships"
     order_sink = ParquetSink(
         nodes_dir / "orders.parquet",
         [source for _, source in ORDER_FIELDS],
@@ -490,44 +593,67 @@ def main() -> int:
         ),
     }
 
-    customers: set[str] = set()
-    drivers: set[str] = set()
-    merchants: set[str] = set()
-    payment_methods: set[str] = set()
-    promotion_codes: set[str] = set()
-    promotion_campaigns: set[str] = set()
-    cancel_actors: set[str] = set()
-    cancel_reasons: set[str] = set()
-    dropoff_fail_actors: set[str] = set()
-    dropoff_fail_codes: set[str] = set()
-    ride_services: set[str] = set()
-    service_types: set[str] = set()
-    sub_verticals: set[str] = set()
-    travel_modes: set[str] = set()
-    channel_types: set[str] = set()
-    promo_campaign_pairs: set[tuple[str, str]] = set()
-    addresses: dict[str, tuple[str | None, str | None, str | None, str]] = {}
-    address_cache: dict[str, str] = {}
+    if append_mode:
+        copy_existing_parquet(existing_nodes_dir / "orders.parquet", order_sink)
+        for name, sink in relationship_sinks.items():
+            copy_existing_parquet(existing_relationships_dir / f"{name}.parquet", sink)
+
+    customers = read_existing_values(existing_nodes_dir / "customers.parquet", "customer_id") if append_mode else set()
+    drivers = read_existing_values(existing_nodes_dir / "drivers.parquet", "driver_id") if append_mode else set()
+    merchants = read_existing_values(existing_nodes_dir / "merchants.parquet", "merchant_id") if append_mode else set()
+    payment_methods = read_existing_values(existing_nodes_dir / "payment_methods.parquet", "name") if append_mode else set()
+    promotion_codes = read_existing_values(existing_nodes_dir / "promotion_codes.parquet", "code") if append_mode else set()
+    promotion_campaigns = read_existing_values(existing_nodes_dir / "promotion_campaigns.parquet", "code") if append_mode else set()
+    cancel_actors = read_existing_values(existing_nodes_dir / "cancel_actors.parquet", "name") if append_mode else set()
+    cancel_reasons = read_existing_values(existing_nodes_dir / "cancel_reasons.parquet", "reason") if append_mode else set()
+    dropoff_fail_actors = read_existing_values(existing_nodes_dir / "dropoff_fail_actors.parquet", "name") if append_mode else set()
+    dropoff_fail_codes = read_existing_values(existing_nodes_dir / "dropoff_fail_codes.parquet", "code") if append_mode else set()
+    ride_services = read_existing_values(existing_nodes_dir / "ride_services.parquet", "name") if append_mode else set()
+    service_types = read_existing_values(existing_nodes_dir / "service_types.parquet", "name") if append_mode else set()
+    sub_verticals = read_existing_values(existing_nodes_dir / "sub_verticals.parquet", "name") if append_mode else set()
+    travel_modes = read_existing_values(existing_nodes_dir / "travel_modes.parquet", "name") if append_mode else set()
+    channel_types = read_existing_values(existing_nodes_dir / "channel_types.parquet", "name") if append_mode else set()
+    promo_campaign_pairs = (
+        read_existing_pairs(existing_relationships_dir / "in_campaign.parquet", "promotion_code", "promotion_campaign_code")
+        if append_mode
+        else set()
+    )
+    addresses, address_cache = read_existing_addresses(existing_nodes_dir / "addresses.parquet") if append_mode else ({}, {})
+    existing_order_ids = read_existing_values(existing_nodes_dir / "orders.parquet", "order_id") if append_mode else set()
     checks: list[dict[str, object]] = []
     processed_rows = 0
+    new_rows = 0
 
     try:
         for batch_number, batch in enumerate(batches, start=1):
             frame = batch_to_frame(batch)
             processed_rows += len(frame)
             checks.extend(quality_report(frame, args.domain))
+            frame, new_order_ids = deduplicate_new_orders(frame, existing_order_ids)
+            if frame.empty:
+                print(
+                    f"batch={batch_number} rows={processed_rows:,} skipped_existing=all",
+                    flush=True,
+                )
+                continue
+            existing_order_ids.update(new_order_ids)
+            new_rows += len(frame)
 
             for column in (
                 "customer_id",
                 "driver_id",
                 "merchant_id",
+                "cancel_by",
+                "cancel_description",
                 "payment_method",
                 "promotion_code",
                 "promotion_campaign_code",
                 "food_dropoff_fail_by",
                 "food_dropoff_fail_code",
+                "service_name",
                 "service_type",
                 "sub_vertical_name",
+                "travel_mode",
                 "channel_type",
             ):
                 if column not in frame.columns:
@@ -601,6 +727,7 @@ def main() -> int:
 
             print(
                 f"batch={batch_number} rows={processed_rows:,} "
+                f"new_rows={new_rows:,} "
                 f"customers={len(customers):,} merchants={len(merchants):,} "
                 f"addresses={len(addresses):,}",
                 flush=True,
@@ -675,10 +802,13 @@ def main() -> int:
         "source": str(source) if source is not None else args.sql_uri,
         "source_kind": "sql" if args.sql_uri else "file",
         "domain": args.domain,
-        "rows": processed_rows,
+        "rows": order_sink.rows,
+        "new_rows": new_rows,
+        "append_mode": append_mode,
         "node_counts": node_counts,
         "relationship_counts": relationship_counts,
     }
+    finalize_output(output, temp_output)
     (output / "manifest.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
     )

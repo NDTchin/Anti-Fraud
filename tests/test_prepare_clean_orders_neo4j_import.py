@@ -9,6 +9,7 @@ from scripts.prepare_clean_orders_neo4j_import import (
     HEADERS,
     build_address_keys,
     clean_id_values,
+    deduplicate_new_orders,
     normalize_order_frame,
     quality_report,
     read_sql_source,
@@ -45,6 +46,7 @@ def test_normalize_order_frame_adds_domain_and_missing_columns() -> None:
             "order_id": ["o1"],
             "order_status": ["COMPLETED"],
             "order_time_local_tz": ["2026-07-14 10:01:02"],
+            "km_ratio": [1.25],
         }
     )
 
@@ -52,7 +54,23 @@ def test_normalize_order_frame_adds_domain_and_missing_columns() -> None:
 
     assert normalized.loc[0, "domain"] == "food"
     assert normalized.loc[0, "order_time_local_tz"] == "2026-07-14T10:01:02"
+    assert bool(normalized.loc[0, "is_completed"]) is True
+    assert normalized.loc[0, "km_ratio"] == 1.25
     assert "merchant_id" not in normalized.columns
+
+
+def test_deduplicate_new_orders_skips_existing_order_ids() -> None:
+    frame = pd.DataFrame(
+        {
+            "order_id": ["o1", "o2", "o2", "o3"],
+            "customer_id": ["c1", "c2", "c2_dup", "c3"],
+        }
+    )
+
+    deduplicated, new_order_ids = deduplicate_new_orders(frame, {"o1"})
+
+    assert deduplicated["order_id"].tolist() == ["o2", "o3"]
+    assert new_order_ids == {"o2", "o3"}
 
 
 def test_quality_report_counts_missing_required_fields() -> None:

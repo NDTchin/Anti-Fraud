@@ -38,9 +38,7 @@ def test_build_pair_stats_and_reasons_for_kbc_case() -> None:
                 "discount": 5000.0,
                 "promotion_code": "P1",
                 "payment_method": "cash",
-                "source_file_date": "2026-07-14",
                 "order_date": "2026-07-14",
-                "is_cancelled": 0,
             },
             {
                 "order_id": "o2",
@@ -62,9 +60,7 @@ def test_build_pair_stats_and_reasons_for_kbc_case() -> None:
                 "discount": 5000.0,
                 "promotion_code": "P1",
                 "payment_method": "cash",
-                "source_file_date": "2026-07-14",
                 "order_date": "2026-07-14",
-                "is_cancelled": 0,
             },
             {
                 "order_id": "o3",
@@ -86,9 +82,7 @@ def test_build_pair_stats_and_reasons_for_kbc_case() -> None:
                 "discount": 0.0,
                 "promotion_code": "P1",
                 "payment_method": "cash",
-                "source_file_date": "2026-07-15",
                 "order_date": "2026-07-15",
-                "is_cancelled": 0,
             },
             {
                 "order_id": "o4",
@@ -110,9 +104,7 @@ def test_build_pair_stats_and_reasons_for_kbc_case() -> None:
                 "discount": 0.0,
                 "promotion_code": "P2",
                 "payment_method": "wallet",
-                "source_file_date": "2026-07-15",
                 "order_date": "2026-07-15",
-                "is_cancelled": 0,
             },
         ]
     )
@@ -140,3 +132,58 @@ def test_build_pair_stats_and_reasons_for_kbc_case() -> None:
     assert {"KB-C_EXTREME_VOLUME", "KB-C_HIGH_GHOST_RATE", "KB-C_SUPERFAST_GAP", "KB-C_TIGHT_PAIR_SHARE", "KB-C_ROUTE_LOOP"} <= set(reason_rows["reason_code"])
     assert flagged_orders["order_id"].nunique() == 3
     assert int(daily["flagged_orders"].sum()) == 3
+
+
+def test_prepare_active_orders_keeps_only_completed_status() -> None:
+    raw = pd.DataFrame(
+        [
+            {
+                "order_id": "completed_order",
+                "driver_id": "d1",
+                "customer_id": "c1",
+                "order_status": "COMPLETED",
+                "order_time_local_tz": "2026-07-14T10:00:00",
+                "pickup_completed_at_local_tz": "2026-07-14T10:01:00",
+                "complete_time_local_tz": "2026-07-14T10:05:00",
+                "service_name": "xanhsm_taxi",
+                "pickup_province_name": "HCM",
+                "pickup_district_name": "D1",
+                "pickup_address": "A",
+                "last_dropoff_province_name": "HCM",
+                "last_dropoff_district_name": "D1",
+                "last_dropoff_address": "B",
+                "avg_kmh": 12.0,
+                "gmv": 12000.0,
+                "discount": 0.0,
+                "promotion_code": "P1",
+                "payment_method": "cash",
+                "order_date": "2026-07-14",
+            },
+            {
+                "order_id": "cancelled_order",
+                "driver_id": "d1",
+                "customer_id": "c1",
+                "order_status": "CANCELLED",
+                "order_time_local_tz": "2026-07-14T10:10:00",
+                "pickup_completed_at_local_tz": "2026-07-14T10:11:00",
+                "complete_time_local_tz": "2026-07-14T10:15:00",
+                "service_name": "xanhsm_taxi",
+                "pickup_province_name": "HCM",
+                "pickup_district_name": "D1",
+                "pickup_address": "A",
+                "last_dropoff_province_name": "HCM",
+                "last_dropoff_district_name": "D1",
+                "last_dropoff_address": "B",
+                "avg_kmh": 0.0,
+                "gmv": 12000.0,
+                "discount": 0.0,
+                "promotion_code": "P1",
+                "payment_method": "cash",
+                "order_date": "2026-07-14",
+            },
+        ]
+    )
+
+    active = prepare_active_orders(raw)
+
+    assert active["order_id"].tolist() == ["completed_order"]
