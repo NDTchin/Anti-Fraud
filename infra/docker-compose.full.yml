@@ -20,7 +20,6 @@ services:
       - "${NEO4J_STORE_DIR:-../data/neo4j-store}/data:/data"
       - "${NEO4J_STORE_DIR:-../data/neo4j-store}/logs:/logs"
       - "${NEO4J_STORE_DIR:-../data/neo4j-store}/plugins:/plugins"
-      - "${NEO4J_IMPORT_DIR:-../data/neo4j-import}:/import:ro"
     healthcheck:
       test:
         - CMD-SHELL
@@ -29,33 +28,3 @@ services:
       timeout: 5s
       retries: 30
       start_period: 60s
-
-  neo4j-import:
-    image: ${NEO4J_IMAGE:-neo4j:2026.06.0}
-    profiles: ["tools"]
-    entrypoint: ["neo4j-admin", "database", "import", "full"]
-    command:
-      - neo4j
-      - --input-type=parquet
-      - --overwrite-destination=true
-      - --max-off-heap-memory=6G
-      - --nodes=Order=/import/headers/orders.csv,/source/orders_ride_masked_2026-07-14.parquet
-      - --nodes=Customer=/import/headers/customers.csv,/import/nodes/customers.parquet
-      - --nodes=Driver=/import/headers/drivers.csv,/import/nodes/drivers.parquet
-      - --nodes=Address=/import/headers/addresses.csv,/import/nodes/addresses.parquet
-      - --nodes=PaymentMethod=/import/headers/payment_methods.csv,/import/nodes/payment_methods.parquet
-      - --nodes=PromotionCode=/import/headers/promotion_codes.csv,/import/nodes/promotion_codes.parquet
-      - --nodes=PromotionCampaign=/import/headers/promotion_campaigns.csv,/import/nodes/promotion_campaigns.parquet
-      - --relationships=PLACED=/import/headers/placed.csv,/import/relationships/placed.parquet
-      - --relationships=SERVED=/import/headers/served.csv,/import/relationships/served.parquet
-      - --relationships=PICKUP_AT=/import/headers/pickup_at.csv,/import/relationships/pickup_at.parquet
-      - --relationships=DROPOFF_AT=/import/headers/dropoff_at.csv,/import/relationships/dropoff_at.parquet
-      - --relationships=PAID_BY=/import/headers/paid_by.csv,/import/relationships/paid_by.parquet
-      - --relationships=USED_PROMO=/import/headers/used_promo.csv,/import/relationships/used_promo.parquet
-      - --relationships=IN_CAMPAIGN=/import/headers/in_campaign.csv,/import/relationships/in_campaign.parquet
-    volumes:
-      - "${NEO4J_STORE_DIR:-../data/neo4j-store}/data:/data"
-      - "${NEO4J_STORE_DIR:-../data/neo4j-store}/logs:/logs"
-      - "${NEO4J_IMPORT_DIR:-../data/neo4j-import}:/import:ro"
-      - "../data:/source:ro"
-

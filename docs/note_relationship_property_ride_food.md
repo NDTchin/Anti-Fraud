@@ -2,12 +2,7 @@
 
 ## Phạm vi rà soát
 
-Tài liệu này được viết lại sau khi đối chiếu trực tiếp với implementation hiện tại của project, chủ yếu tại:
-
-- `scripts/prepare_clean_orders_neo4j_import.py`
-- `scripts/initialize_neo4j.py`
-- `src/graph/cypher/001_constraints.cypher`
-- `tests/test_prepare_clean_orders_neo4j_import.py`
+Tài liệu này được viết lại sau khi đối chiếu trực tiếp với implementation hiện tại của project.
 
 Mục tiêu của báo cáo là mô tả đúng phần đang được thực thi trong project hiện tại, không dựa trên schema kỳ vọng hay định hướng tương lai.
 
@@ -35,7 +30,7 @@ Nói cách khác, implementation hiện tại không tách hoàn toàn theo ki�
 
 ## 1. Những gì đang là `property` trên node `Order`
 
-Theo `ORDER_FIELDS` trong `scripts/prepare_clean_orders_neo4j_import.py`, node `Order` hiện giữ các nhóm thuộc tính sau.
+Theo `ORDER_PROPERTY_SPECS` trong `scripts/import_ride_daily_to_neo4j.py`, node `Order` hiện giữ các nhóm thuộc tính sau.
 
 ### 1.1. Định danh và thời gian
 

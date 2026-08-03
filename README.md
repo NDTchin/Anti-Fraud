@@ -1,6 +1,6 @@
 # Graph Fraud Detection
 
-Sprint 1 project for loading ride orders into Neo4j, detecting suspicious graph patterns with Cypher and GDS, and visualizing fraud groups.
+Project này tập trung vào phát hiện gian lận `ride` bằng graph và rule-based analysis trên Neo4j.
 
 ## Local setup
 
@@ -11,41 +11,54 @@ python -m pip install -r requirements-dev.txt
 Copy-Item .env.example .env
 ```
 
-Docker Desktop and Neo4j with APOC/GDS are infrastructure dependencies and are not installed inside the Python virtual environment.
+Docker Desktop và Neo4j với `APOC`/`GDS` là dependency hạ tầng, không nằm trong virtual environment Python.
 
 ## Main folders
 
-- `src/ingestion`: read and validate source data.
-- `src/transform`: normalize entities and build graph edges.
-- `src/graph`: Neo4j connection, schema and Cypher queries.
-- `src/rules`: explainable fraud rules.
-- `src/algorithms`: GDS projections and algorithms.
-- `src/scoring`: combine rule and algorithm evidence.
-- `src/api`: FastAPI application.
-- `src/dashboard`: Streamlit application.
+- `src/algorithms`: logic phát hiện collusion và graph signals
+- `src/config`: cấu hình `.env`
+- `src/dashboard`: dashboard Streamlit cho analyst
+- `src/graph`: Cypher constraints và Neo4j helpers
+- `src/rules`: rule nghiệp vụ
+- `src/scoring`: scoring và report output
+- `scripts`: tác vụ build report và import dữ liệu
+- `tests`: unit tests
 
+## Ride daily import
 
+Luồng import hiện tại là incremental upsert theo ngày, không còn rebuild toàn bộ Neo4j store.
 
-## Dual Neo4j setup
-
-If you want to run `food` and `ride` side by side, use [infra/docker-compose.dual-domains.yml](/D:/VSF/infra/docker-compose.dual-domains.yml).
-
-- `food` Browser: `http://localhost:7474/browser/`
-- `food` Bolt: `bolt://localhost:7687`
-- `ride` Browser: `http://localhost:7475/browser/`
-- `ride` Bolt: `bolt://localhost:7688`
-
-Import each graph into its own store:
+Khởi động Neo4j:
 
 ```powershell
-docker compose -f infra/docker-compose.dual-domains.yml --profile tools run --rm neo4j-import-food
-docker compose -f infra/docker-compose.dual-domains.yml --profile tools run --rm neo4j-import-ride
+docker compose -f infra/docker-compose.full.yml up -d neo4j
 ```
 
-Start both containers:
+Import một file `ride` đã clean:
 
 ```powershell
-docker compose -f infra/docker-compose.dual-domains.yml up -d neo4j-food neo4j-ride
+.\scripts\run_ride_import.ps1 -Source data\handoff\ride\cleaned_orders\orders_ride_clean_2026-07-14_to_17.parquet
 ```
 
-If you want the app or scripts to point to `ride`, set `NEO4J_URI=bolt://localhost:7688` in `.env`.
+Hoặc gọi trực tiếp:
+
+```powershell
+python -m scripts.import_ride_daily_to_neo4j `
+  --source data\handoff\ride\cleaned_orders\orders_ride_clean_2026-07-14_to_17.parquet `
+  --batch-size 2000
+```
+
+Script sẽ:
+
+- đảm bảo Neo4j constraints/index tồn tại
+- đọc dữ liệu theo batch
+- `MERGE` `Order`, `Customer`, `Driver`, `Address`, `PromotionCode` và các node liên quan
+- upsert quan hệ như `PLACED`, `SERVED`, `PICKUP_AT`, `DROPOFF_AT`, `USED_PROMO`
+
+## Daily outputs
+
+Để build output phục vụ dashboard:
+
+```powershell
+python -m scripts.build_task3_daily_outputs --report-dir reports/task3
+```
