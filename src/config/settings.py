@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
-    neo4j_domain: Literal["food", "ride"] = "food"
+    neo4j_domain: Literal["food", "ride"] = "ride"
     neo4j_food_uri: str = "bolt://localhost:7687"
     neo4j_ride_uri: str = "bolt://localhost:7688"
     neo4j_food_browser_url: str = "http://localhost:7474/browser/"
