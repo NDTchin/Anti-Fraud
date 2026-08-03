@@ -10,6 +10,7 @@ from src.algorithms.ride_collusion_graph import (
 from src.rules.ride_kbc_rules import KbcRuleConfig, annotate_kbc_signals, apply_kbc_rules
 from src.scoring.ride_collusion_scoring import (
     build_flagged_orders,
+    enrich_pair_graph_features,
     score_pairs,
     summarize_daily_flags,
 )

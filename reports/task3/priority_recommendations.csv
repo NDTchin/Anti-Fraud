@@ -1,2 +1,2 @@
-domain,rule_name,flagged_orders,total_discount,total_gmv,avg_rule_score,high_confidence_orders,priority_score,recommendation,avg_anomaly_score,model_overlap_rate
-ride,REPEATED_CUSTOMER_DRIVER,5785,82955000.0,832690000.0,24.323251512532412,1021,323.33,Prioritize driver-customer pairs with high ghost rate or sub-5-minute repeat gaps; verify timeline and route-loop evidence in Neo4j.,0.0,0.0
+domain,rule_name,flagged_orders,total_discount,total_gmv,avg_rule_score,avg_graph_risk_score,high_confidence_orders,priority_score,recommendation,avg_anomaly_score,model_overlap_rate
+ride,REPEATED_CUSTOMER_DRIVER,5785,82955000.0,832690000.0,42.55915643906655,76.01624546240276,1021,246.61,"Prioritize driver-customer pairs with strong ride-rule signals plus shared payment, promo, address, or route support inside the same suspicious component; verify component context in Neo4j.",0.0,0.0

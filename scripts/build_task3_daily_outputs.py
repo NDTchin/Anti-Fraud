@@ -14,6 +14,7 @@ from src.algorithms.ride_collusion_graph import (
 from src.rules.ride_kbc_rules import KbcRuleConfig, annotate_kbc_signals, apply_kbc_rules
 from src.scoring.ride_collusion_scoring import (
     build_flagged_orders,
+    enrich_pair_graph_features,
     build_priority_recommendations,
     build_quality_report,
     build_rule_model_comparison,
@@ -51,6 +52,7 @@ def build_outputs(input_path: Path, report_dir: Path, known_pairs_path: Path) ->
     pair_stats, _, trip_threshold = build_pair_stats(active_orders, graph_config)
     pair_stats = annotate_kbc_signals(pair_stats, rule_config)
     pair_stats = score_pairs(pair_stats)
+    pair_stats = enrich_pair_graph_features(active_orders, pair_stats)
     pair_reason_rows = apply_kbc_rules(pair_stats, rule_config)
     flagged_orders = build_flagged_orders(active_orders, pair_reason_rows)
 
