@@ -95,39 +95,59 @@ def build_kbc_metric_guide() -> pd.DataFrame:
         [
             {
                 "metric": "Flagged pairs",
-                "meaning": "Số cặp tài xế-khách hàng bị rule KB-C giữ lại sau khi áp ngưỡng và bộ lọc hiện tại.",
+                "meaning": "So cap tai xe-khach hang bi rule KB-C giu lai sau khi ap nguong va bo loc hien tai.",
             },
             {
                 "metric": "High-confidence pairs",
-                "meaning": "Số cặp có dấu hiệu mạnh hơn, tức `ghost_rate > 0.3` hoặc `min_gap_min < 5`.",
+                "meaning": "So cap co dau hieu manh hon, tuc `ghost_rate > 0.3` hoac `min_gap_min < 5`.",
+            },
+            {
+                "metric": "Risk tier",
+                "meaning": "Muc uu tien hien tai cua cap theo score cuoi cung: `HIGH`, `MEDIUM`, `WATCHLIST`.",
             },
             {
                 "metric": "Flagged orders",
-                "meaning": "Số order thuộc các cặp đang bị flag. Chỉ số này cho biết khối lượng order cần review.",
+                "meaning": "So order thuoc cac cap dang bi flag. Chi so nay cho biet khoi luong order can review.",
             },
             {
                 "metric": "Min gap",
-                "meaning": "Khoảng cách phút nhỏ nhất giữa hai order liên tiếp của cùng một cặp. Càng nhỏ càng bất thường.",
+                "meaning": "Khoang cach phut nho nhat giua hai order lien tiep cua cung mot cap. Cang nho cang bat thuong.",
             },
             {
                 "metric": "Max ghost rate",
-                "meaning": "Tỷ lệ lớn nhất của các order có `avg_kmh = 0` trong các cặp đang được hiển thị.",
+                "meaning": "Ty le lon nhat cua cac order co `avg_kmh = 0` trong cac cap dang duoc hien thi.",
             },
             {
                 "metric": "n_trips",
-                "meaning": "Tổng số chuyến giữa một `driver_id` và `customer_id` trong cửa sổ 4 ngày.",
+                "meaning": "Tong so chuyen giua mot `driver_id` va `customer_id` trong cua so 4 ngay.",
             },
             {
                 "metric": "ghost_rate",
-                "meaning": "Tỷ lệ chuyến có `avg_kmh = 0` trên tổng số chuyến của cùng cặp.",
+                "meaning": "Ty le chuyen co `avg_kmh = 0` tren tong so chuyen cua cung cap.",
             },
             {
                 "metric": "min_gap_min",
-                "meaning": "Khoảng cách nhỏ nhất giữa hai chuyến liên tiếp của cùng cặp, tính theo phút.",
+                "meaning": "Khoang cach nho nhat giua hai chuyen lien tiep cua cung cap, tinh theo phut.",
             },
             {
-                "metric": "rule_score",
-                "meaning": "Điểm tổng hợp để xếp mức độ ưu tiên review. Điểm cao nghĩa là cặp đáng xem trước.",
+                "metric": "rule_score_base",
+                "meaning": "Diem rule nen truoc khi cong them ngu canh graph. Day la phan diem den tu hanh vi truc tiep cua pair.",
+            },
+            {
+                "metric": "graph_risk_score",
+                "meaning": "Diem bo sung tu graph hien tai: pair nay dinh voi bao nhieu pair dang ngo khac va co bao nhieu tin hieu chia se.",
+            },
+            {
+                "metric": "final_risk_score",
+                "meaning": "Diem uu tien review cuoi cung sau khi ket hop score nen va score graph. Trong output hien tai `rule_score` bam theo diem cuoi nay.",
+            },
+            {
+                "metric": "component_size",
+                "meaning": "So pair nam trong cung connected component nghi ngo voi pair dang xet.",
+            },
+            {
+                "metric": "linked_pair_count",
+                "meaning": "So pair dang ngo khac duoc noi truc tiep voi pair hien tai qua tin hieu chia se.",
             },
         ]
     )
@@ -152,6 +172,9 @@ def build_window_metrics(flags: pd.DataFrame) -> pd.DataFrame:
                 "flagged_customers": int(window["customer_id"].nunique()) if "customer_id" in window.columns else 0,
                 "flagged_drivers": int(window["driver_id"].nunique()) if "driver_id" in window.columns else 0,
                 "high_conf_orders": int(window.loc[window["high_confidence"].fillna(False), "order_id"].nunique()) if {"high_confidence", "order_id"} <= set(window.columns) else 0,
+                "high_risk_orders": int(window.loc[window["risk_tier"].eq("HIGH"), "order_id"].nunique()) if {"risk_tier", "order_id"} <= set(window.columns) else 0,
+                "medium_risk_orders": int(window.loc[window["risk_tier"].eq("MEDIUM"), "order_id"].nunique()) if {"risk_tier", "order_id"} <= set(window.columns) else 0,
+                "watchlist_orders": int(window.loc[window["risk_tier"].eq("WATCHLIST"), "order_id"].nunique()) if {"risk_tier", "order_id"} <= set(window.columns) else 0,
                 "start_date": start_date,
                 "end_date": latest_date,
             }
@@ -170,6 +193,14 @@ def build_entity_summary(flags: pd.DataFrame, entity_col: str) -> pd.DataFrame:
         "max_ghost_rate": ("ghost_rate", "max"),
         "min_gap_min": ("min_gap_min", "min"),
     }
+    if "graph_risk_score" in flags.columns:
+        agg_map["avg_graph_risk_score"] = ("graph_risk_score", "mean")
+    if "final_risk_score" in flags.columns:
+        agg_map["max_final_risk_score"] = ("final_risk_score", "max")
+    if "component_size" in flags.columns:
+        agg_map["max_component_size"] = ("component_size", "max")
+    if "linked_pair_count" in flags.columns:
+        agg_map["max_linked_pair_count"] = ("linked_pair_count", "max")
     if entity_col == "customer_id" and "driver_id" in flags.columns:
         agg_map["linked_drivers"] = ("driver_id", "nunique")
     if entity_col == "driver_id" and "customer_id" in flags.columns:
@@ -185,13 +216,18 @@ def build_entity_summary(flags: pd.DataFrame, entity_col: str) -> pd.DataFrame:
 def build_order_reason_summary(flags: pd.DataFrame) -> pd.DataFrame:
     if flags.empty:
         return pd.DataFrame()
+    agg_map: dict[str, tuple[str, str]] = {
+        "flagged_orders": ("order_id", "nunique"),
+        "flagged_pairs": ("driver_id", "nunique"),
+        "avg_rule_score": ("rule_score", "mean"),
+    }
+    if "graph_risk_score" in flags.columns:
+        agg_map["avg_graph_risk_score"] = ("graph_risk_score", "mean")
+    if "final_risk_score" in flags.columns:
+        agg_map["avg_final_risk_score"] = ("final_risk_score", "mean")
     return (
         flags.groupby("reason_code", dropna=False)
-        .agg(
-            flagged_orders=("order_id", "nunique"),
-            flagged_pairs=("driver_id", "nunique"),
-            avg_rule_score=("rule_score", "mean"),
-        )
+        .agg(**agg_map)
         .reset_index()
         .sort_values(["flagged_orders", "avg_rule_score"], ascending=False)
     )
@@ -362,8 +398,44 @@ def build_rule_cluster_summary(rule_flags: pd.DataFrame, selected_rule: str) -> 
             agg_map["avg_gmv"] = ("avg_gmv", "mean")
         elif "gmv" in rule_flags.columns:
             agg_map["avg_gmv"] = ("gmv", "mean")
+        if "rule_score_base" in rule_flags.columns:
+            agg_map["avg_rule_score_base"] = ("rule_score_base", "mean")
+        if "graph_risk_score" in rule_flags.columns:
+            agg_map["avg_graph_risk_score"] = ("graph_risk_score", "mean")
+        if "final_risk_score" in rule_flags.columns:
+            agg_map["max_final_risk_score"] = ("final_risk_score", "max")
+        if "supporting_signal_count" in rule_flags.columns:
+            agg_map["max_supporting_signal_count"] = ("supporting_signal_count", "max")
+        if "linked_pair_count" in rule_flags.columns:
+            agg_map["max_linked_pair_count"] = ("linked_pair_count", "max")
+        if "component_size" in rule_flags.columns:
+            agg_map["max_component_size"] = ("component_size", "max")
+        if "component_density" in rule_flags.columns:
+            agg_map["max_component_density"] = ("component_density", "max")
+        if "risk_tier" in rule_flags.columns:
+            agg_map["top_risk_tier"] = (
+                "risk_tier",
+                lambda values: next(
+                    (
+                        tier
+                        for tier in ("HIGH", "MEDIUM", "WATCHLIST")
+                        if tier in {str(value) for value in values.dropna()}
+                    ),
+                    None,
+                ),
+            )
         summary = rule_flags.groupby(group_cols, dropna=False).agg(**agg_map).reset_index()
-        sort_cols = [column for column in ("high_confidence", "max_n_trips", "flagged_orders", "avg_rule_score") if column in summary.columns]
+        sort_cols = [
+            column
+            for column in (
+                "high_confidence",
+                "max_final_risk_score",
+                "max_n_trips",
+                "flagged_orders",
+                "avg_rule_score",
+            )
+            if column in summary.columns
+        ]
         if not sort_cols:
             sort_cols = ["flagged_orders", "avg_rule_score"]
         return summary.sort_values(sort_cols, ascending=[False] * len(sort_cols))
