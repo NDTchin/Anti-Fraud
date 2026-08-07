@@ -1,368 +1,169 @@
-# Graph Algorithm Đang Dùng Hiện Tại Cho Bài Toán Fraud
+# Graph Algorithms Dang Duoc Chon Cho Huong Di Moi Cua Project
 
-## Phạm vi tài liệu
+## Pham vi tai lieu
 
-Tài liệu này chỉ mô tả các graph algorithm đang thực sự được dùng hiện tại trong project cho bài toán `ride` sau khi đã rescore vào Tuesday, July 28, 2026.
+Tai lieu nay mo ta bo graph algorithms nen duoc xem la huong chinh moi cua project cho bai toan:
 
-Tài liệu này không mô tả:
+- `Driver-Customer Ghost-Trip Collusion`
 
-- roadmap phát triển tiếp
-- thuật toán chưa triển khai
-- đề xuất tương lai
+Nguon dinh huong goc:
 
-Phần được xác nhận trực tiếp từ source code hiện có trong repo nằm chủ yếu tại:
+- `docs/graph_algorithms_for_driver_customer_ghost_trip_collusion.md`
 
-- `src/algorithms/ride_collusion_graph.py`
-- `src/rules/ride_kbc_rules.py`
-- `src/scoring/ride_collusion_scoring.py`
-- `scripts/build_task3_daily_outputs.py`
-- `tests/test_ride_collusion_rules.py`
+Tai lieu nay khong co muc tieu mo ta "code dang chay hien tai" theo nghia implementation lich su. Thay vao do, no chot bo thuat toan can duoc uu tien khi lam lai project.
 
-## 1. Kết luận nhanh
+Ngay cap nhat: `2026-08-05`
 
-Hiện tại, các graph algorithm đang được dùng thật cho `ride` gồm 3 lớp chính:
+## Ket luan nhanh
 
-1. weighted bipartite edge outlier
-2. temporal và concentration scoring trên edge
-3. shared-entity graph support + component grouping
+Project nen tap trung vao 3 graph algorithms cot loi:
 
-Nói cách khác, project hiện chưa dùng các graph algorithm community nâng cao như:
+1. `Weighted edge outlier detection`
+2. `Bipartite concentration scoring`
+3. `WCC`
 
-- `Weighted Node Similarity`
-- `k-core`
-- `Louvain`
+Ba thanh phan nay tuong ung voi 3 cau hoi chinh:
 
-Phần đang chạy thật hiện tại là graph scoring xoay quanh pair `driver_id - customer_id` và suspicious pair graph.
+1. Pair nao lap lai bat thuong?
+2. Pair nao that su co tinh collusion cao?
+3. Cac pair nghi ngo co ket noi thanh network de mo case dieu tra hay khong?
 
-## 2. Đồ thị đang được dùng
+## 1. Don vi phan tich trung tam
 
-Đơn vị graph trung tâm hiện tại là pair:
+Don vi phan tich chinh khong phai tung order rieng le, ma la pair:
 
 - `driver_id`
 - `customer_id`
 
-Về mặt ý tưởng, pair này là một cạnh có trọng số trong đồ thị hai phía:
+Moi pair duoc xem la mot canh co trong so trong do thi hai phia:
 
-- phía 1: `Driver`
-- phía 2: `Customer`
+- ben trai: `Driver`
+- ben phai: `Customer`
+- trong so canh: `trip_count`
 
-Trọng số chính của cạnh là:
+Day la abstraction dung nhat cho bai toan ghost-trip collusion vi hanh vi gian lan thuong tap trung vao quan he lap lai giua hai dau mut.
 
-- `n_trips`
+## 2. Bo 3 thuat toan cot loi
 
-Ngoài ra mỗi cạnh còn có thêm ngữ cảnh:
+## 2.1. Weighted edge outlier detection
 
-- ghost behavior
-- time gap
-- route reuse
-- payment reuse
-- promo reuse
-- pickup/dropoff reuse
+Muc tieu:
 
-## 3. Weighted Bipartite Edge Outlier
+- tim cac pair co `trip_count` nam o phan duoi cua phan phoi toan bo pairs trong cung time window
 
-Đây là graph algorithm nền đầu tiên đang dùng thật trong project.
+Vai tro:
 
-### Cách chạy
+- first-pass detector
+- tao seed suspicious pairs
+- de giai thich va de scale
 
-Từ tất cả active orders:
+Day la lop phat hien dau tien, nhung khong nen dung mot minh de ket luan collusion.
 
-- group theo `driver_id`, `customer_id`
-- tính `n_trips`
-- tính phân phối toàn cục của `n_trips`
-- lấy ngưỡng `trip_threshold = quantile(0.9999)`
-- chỉ giữ các pair có `n_trips > trip_threshold`
+## 2.2. Bipartite concentration scoring
 
-### Ý nghĩa
+Muc tieu:
 
-Đây là cách phát hiện các cạnh quá nặng trong đồ thị `Driver - Customer`.
+- do xem mot pair co chiem ti trong bat thuong tren ca hai dau mut hay khong
 
-Nó phù hợp vì:
+Feature cot loi:
 
-- collusion kiểu repeated pair thường dồn vào rất ít cặp
-- edge weight là tín hiệu mạnh và dễ giải thích nhất
+- `pair_share_driver = pair_trip_count / total_driver_trip_count`
+- `pair_share_customer = pair_trip_count / total_customer_trip_count`
 
-## 4. Endpoint Concentration Scoring
+Vai tro:
 
-Đây là lớp graph scoring thứ hai đang dùng thật trong project.
+- refinement layer cho suspicious pairs
+- giam false positive tu volume tuyet doi
+- bat dung ban chat "khoa cung" giua driver va customer
 
-### Cách chạy
+## 2.3. WCC
 
-Với mỗi pair, project tính:
+Muc tieu:
 
-- `pair_share_driver = n_trips / driver_trip_count`
-- `pair_share_customer = n_trips / customer_trip_count`
+- gom cac pair nghi ngo thanh `component` de phuc vu dieu tra
 
-### Ý nghĩa
+WCC duoc chay tren suspicious graph, noi cac suspicious pairs qua shared entities nhu:
 
-Đây là cách đo xem một cạnh có “độc chiếm” activity của hai đầu mút hay không.
+- shared driver
+- shared customer
+- shared address
+- shared payment
+- shared promo
 
-Nếu:
+Vai tro:
 
-- một driver gần như chủ yếu phục vụ một customer
-- và customer đó cũng chủ yếu đi với driver đó
+- chuyen tu pair detection sang network investigation
+- tao `component_id`, `component_size`, danh sach member, va do uu tien mo case
 
-thì pair này đáng ngờ hơn.
+## 3. Pipeline nen duoc xem la chuan
 
-### Vai trò trong scoring
+Pipeline graph-first duoc uu tien trong huong moi:
 
-Tín hiệu này hiện được dùng:
+1. Build pair table theo time window
+2. Tinh `trip_count`, `driver_trip_count`, `customer_trip_count`
+3. Tinh `pair_share_driver`, `pair_share_customer`
+4. Chay `weighted edge outlier detection`
+5. Chay `bipartite concentration scoring`
+6. Tao suspicious pair list
+7. Build suspicious graph tu shared entities
+8. Chay `WCC`
+9. Rank pair va rank component de analyst review
 
-- trong `KB-C_TIGHT_PAIR_SHARE`
-- trong `rule_score_base`
+## 4. Cac signal nen duoc xem la enrichment, khong phai graph core
 
-## 5. Temporal Edge Anomaly
+Cac signal sau van huu ich, nhung trong huong moi chung khong phai bo 3 graph algorithms cot loi:
 
-Đây là lớp graph-temporal scoring đang dùng thật trong project.
-
-### Cách chạy
-
-Project sort order theo thời gian trên cùng một pair, sau đó tính:
-
-- `min_gap_min`
-
-Đồng thời project xác định:
-
-- `is_ghost = (avg_kmh == 0)`
-- `n_ghost`
-- `ghost_rate`
-
-### Ý nghĩa
-
-Đây là dạng anomaly detection trên lịch sử thời gian của cùng một cạnh.
-
-Nó giúp phát hiện:
-
-- hai chuyến quá sát nhau
-- nhiều chuyến không di chuyển
-
-### Vai trò trong scoring
-
-Tín hiệu này hiện được dùng:
-
-- trong `KB-C_HIGH_GHOST_RATE`
-- trong `KB-C_SUPERFAST_GAP`
-- trong `high_confidence`
-- trong `rule_score_base`
-
-## 6. Route Reuse Concentration
-
-Đây là một graph-context signal đang dùng thật.
-
-### Cách chạy
-
-Project tạo:
-
-- `route_key = pickup_address -> last_dropoff_address`
-
-Sau đó trên mỗi pair tính:
-
-- route xuất hiện nhiều nhất
+- `ghost_rate` tu `avg_kmh = 0`
+- `min_gap_min` hoac superfast repeat gap
 - `dominant_route_share`
+- route reuse templates
+- script similarity
 
-### Ý nghĩa
+Nen xem chung la:
 
-Nếu cùng một pair lặp lại cùng một tuyến quá nhiều lần, đây là dấu hiệu của:
+- `operational fraud signals`
+- `business enrichment`
+- `precision boosters`
 
-- route loop
-- template hành vi lặp lại
+Khong nen de cac signal nay chi phoi kien truc graph core cua project.
 
-### Vai trò trong scoring
+## 5. Nhung gi khong con la uu tien giai doan dau
 
-Tín hiệu này hiện được dùng:
+O giai doan MVP va huong lam lai project, khong nen dat cac thuat toan sau lam trung tam:
 
-- trong `KB-C_ROUTE_LOOP`
-- trong `rule_score_base`
-
-## 7. Shared-Entity Concentration
-
-Đây là lớp graph support mới đã được áp dụng thật cho `ride`.
-
-### Thực thể dùng để nối pair với pair
-
-Project hiện nối các pair nghi vấn qua:
-
-- `payment_method`
-- `promotion_code`
-- `pickup_address`
-- `last_dropoff_address`
-- `route_key`
-
-### Điều kiện nối
-
-Một shared entity chỉ được dùng để nối pair nếu:
-
-- có ít nhất 2 pair cùng dùng
-- không vượt quá ngưỡng phổ biến cho loại entity đó
-
-Các ngưỡng mặc định hiện tại:
-
-- `payment_max_degree = 150`
-- `promo_max_degree = 200`
-- `address_max_degree = 50`
-- `route_max_degree = 50`
-
-### Ý nghĩa
-
-Đây là cách thêm graph support để biết pair nghi vấn có:
-
-- đứng một mình
-- hay nằm trong vùng có shared behavior với nhiều pair khác
-
-## 8. Component Grouping Bằng Connected Components
-
-Đây là bước cluster baseline đang dùng thật.
-
-### Cách chạy
-
-Sau khi build suspicious pair graph từ shared entities, project dùng:
-
-- `networkx.connected_components`
-
-để gom pair thành component.
-
-Mỗi pair hiện có thêm:
-
-- `component_id`
-- `component_size`
-- `component_edge_count`
-- `component_density`
-
-### Ý nghĩa
-
-Đây là cách gom các pair có liên hệ graph vào cùng một cụm nghi vấn.
-
-Về mặt ý tưởng, nó tương đương với một bước grouping kiểu:
-
-- connected-component baseline
-
-trên suspicious pair graph.
-
-## 9. Graph Support Metrics Đang Dùng
-
-Từ suspicious pair graph, project hiện tính thêm các metric:
-
-- `shared_payment_count`
-- `shared_promo_count`
-- `shared_pickup_count`
-- `shared_dropoff_count`
-- `shared_route_count`
-- `supporting_signal_count`
-- `linked_pair_count`
-- `component_size`
-- `component_density`
-
-Các metric này cho biết:
-
-- pair được bao nhiêu loại tín hiệu graph support
-- pair đang nối với bao nhiêu pair khác
-- pair đang nằm trong component lớn hay nhỏ
-- component đó dày hay loãng
-
-## 10. Graph Risk Score Đang Dùng
-
-Từ các metric graph trên, project hiện sinh:
-
-- `graph_risk_score`
-
-Điểm này đang được tính từ tổ hợp:
-
-- `linked_pair_count`
-- `supporting_signal_count`
-- `component_size`
-- `component_density`
-
-Về bản chất:
-
-- đây là graph-level support score cho pair
-
-Nó không thay thế rule score nền, mà bổ sung context graph để rescore.
-
-## 11. Cách Graph Algorithm Gắn Vào Scoring
-
-Hiện tại project đã có 3 lớp điểm:
-
-- `rule_score_base`
-- `graph_risk_score`
-- `final_risk_score`
-
-### `rule_score_base`
-
-Điểm nền từ:
-
-- edge outlier
-- pair concentration
-- temporal anomaly
-- route reuse
-
-### `graph_risk_score`
-
-Điểm support từ:
-
-- shared-entity graph
-- connected component context
-
-### `final_risk_score`
-
-Điểm cuối cùng sau khi blend hai lớp trên, với quy tắc:
-
-- không thấp hơn `rule_score_base`
-
-Điều này có nghĩa:
-
-- graph algorithm hiện tại chỉ nâng hoặc giữ nguyên mức độ nghi ngờ
-
-## 12. Cách Graph Algorithm Gắn Vào Flagging
-
-Sau khi pair có điểm cuối, project materialize kết quả xuống order.
-
-Mỗi order hiện có thể nhận thêm:
-
-- `graph_risk_score`
-- `final_risk_score`
-- `linked_pair_count`
-- `supporting_signal_count`
-- `component_id`
-- `component_size`
-- `component_density`
-
-Nhờ vậy, analyst có thể thấy:
-
-- không chỉ pair đó mạnh theo rule
-- mà còn pair đó có nằm trong cluster đáng ngờ hay không
-
-## 13. Những thuật toán hiện không nằm trong scope hiện tại
-
-Để tránh hiểu nhầm, các thuật toán sau hiện chưa nằm trong logic đang chạy thật của repo:
-
-- `Weighted Node Similarity`
-- `k-core`
 - `Louvain`
-- ring density scoring riêng
+- `k-core`
+- `node similarity` tong quat
+- ring scoring phuc tap
 
-Vì vậy không nên mô tả chúng như thể đang được dùng trong pipeline hiện tại.
+Ly do:
 
-## 14. Kết luận
+- kho explain hon
+- can graph phong phu hon moi phat huy tac dung
+- khong sat bai toan repeated pair bang bo 3 cot loi
 
-Các graph algorithm đang dùng hiện tại cho bài toán `ride` của project là:
+## 6. Cach dinh vi tai lieu nay so voi implementation
 
-- weighted bipartite edge outlier
-- endpoint concentration scoring
-- temporal edge anomaly
-- route reuse concentration
-- shared-entity concentration
-- connected-components baseline trên suspicious pair graph
+Tai lieu nay la `target architecture note`, khong phai bao cao "as-is".
 
-Những thuật toán này hiện đã được gắn trực tiếp vào:
+Neu implementation hien tai co them:
 
-- `rule_score_base`
-- `graph_risk_score`
-- `final_risk_score`
-- `flagged_orders`
+- ghost rules
+- fast-gap rules
+- route-loop rules
+- blended risk score
 
-Nói ngắn gọn, project hiện đang dùng graph theo cách:
+thi nen hieu do la phan di san hoac enrichment. Huong moi can duoc mo ta va danh gia theo logic:
 
-- bắt đầu từ pair bất thường
-- thêm support từ shared entities
-- gom pair thành component
-- rồi dùng context đó để chấm điểm lại và gắn cờ order
+- core graph pipeline truoc
+- enrichment sau
+
+## 7. Final recommendation
+
+Neu can chot bo graph algorithms de build lai project theo huong gon, dung trong tam, de ban giao va de explain, thi bo can chot la:
+
+1. `Weighted edge outlier detection`
+2. `Bipartite concentration scoring`
+3. `WCC`
+
+Day la bo khung graph chinh. Moi signal khac nen duoc gan vao nhu lop ho tro sau khi bo khung nay on dinh.

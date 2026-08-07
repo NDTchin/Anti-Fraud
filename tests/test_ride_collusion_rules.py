@@ -5,10 +5,13 @@ import pandas as pd
 from src.algorithms.ride_collusion_graph import (
     RideCollusionGraphConfig,
     build_pair_stats,
+    enrich_suspicious_pair_details,
     prepare_active_orders,
+    shortlist_suspicious_pairs,
 )
 from src.rules.ride_kbc_rules import KbcRuleConfig, annotate_kbc_signals, apply_kbc_rules
 from src.scoring.ride_collusion_scoring import (
+    build_graph_quality_reports,
     build_flagged_orders,
     enrich_pair_graph_features,
     score_pairs,
@@ -117,8 +120,10 @@ def test_build_pair_stats_and_reasons_for_kbc_case() -> None:
     graph_config = RideCollusionGraphConfig(extreme_trip_quantile=0.5)
     rule_config = KbcRuleConfig(high_ghost_rate=0.3, superfast_gap_min=5.0, min_pair_trips_for_share_rule=3)
     pair_stats, _, _ = build_pair_stats(active, graph_config)
-    pair_stats = annotate_kbc_signals(pair_stats, rule_config)
     pair_stats = score_pairs(pair_stats)
+    pair_stats = shortlist_suspicious_pairs(pair_stats)
+    pair_stats = enrich_suspicious_pair_details(active, pair_stats)
+    pair_stats = annotate_kbc_signals(pair_stats, rule_config)
     reason_rows = apply_kbc_rules(pair_stats, rule_config)
     flagged_orders = build_flagged_orders(active, reason_rows)
     daily = summarize_daily_flags(flagged_orders)
@@ -130,6 +135,7 @@ def test_build_pair_stats_and_reasons_for_kbc_case() -> None:
     assert round(float(pair_stats.iloc[0]["ghost_rate"]), 4) == round(2 / 3, 4)
     assert round(float(pair_stats.iloc[0]["min_gap_min"]), 1) == 0.9
     assert bool(pair_stats.iloc[0]["high_confidence"]) is True
+    assert round(float(pair_stats.iloc[0]["pair_core_score"]), 2) > 40
     assert {"KB-C_EXTREME_VOLUME", "KB-C_HIGH_GHOST_RATE", "KB-C_SUPERFAST_GAP", "KB-C_TIGHT_PAIR_SHARE", "KB-C_ROUTE_LOOP"} <= set(reason_rows["reason_code"])
     assert flagged_orders["order_id"].nunique() == 3
     assert int(daily["flagged_orders"].sum()) == 3
@@ -188,3 +194,126 @@ def test_prepare_active_orders_keeps_only_completed_status() -> None:
     active = prepare_active_orders(raw)
 
     assert active["order_id"].tolist() == ["completed_order"]
+
+
+def test_graph_support_requires_more_than_single_hub_signal() -> None:
+    active = pd.DataFrame(
+        [
+            {
+                "order_id": "o1",
+                "driver_id": "d1",
+                "customer_id": "c1",
+                "payment_method": "cash",
+                "promotion_code": "PROMO_GLOBAL",
+                "pickup_address": "A",
+                "last_dropoff_address": "B",
+                "route_key": "A -> B",
+            },
+            {
+                "order_id": "o2",
+                "driver_id": "d2",
+                "customer_id": "c2",
+                "payment_method": "wallet",
+                "promotion_code": "PROMO_GLOBAL",
+                "pickup_address": "X",
+                "last_dropoff_address": "Y",
+                "route_key": "X -> Y",
+            },
+            {
+                "order_id": "o3",
+                "driver_id": "d3",
+                "customer_id": "c3",
+                "payment_method": "cash",
+                "promotion_code": "PROMO_GLOBAL",
+                "pickup_address": "A",
+                "last_dropoff_address": "Z",
+                "route_key": "A -> Z",
+            },
+        ]
+    )
+    pair_stats = pd.DataFrame(
+        [
+            {"driver_id": "d1", "customer_id": "c1", "pair_core_score": 70.0, "n_trips": 5},
+            {"driver_id": "d2", "customer_id": "c2", "pair_core_score": 65.0, "n_trips": 4},
+            {"driver_id": "d3", "customer_id": "c3", "pair_core_score": 68.0, "n_trips": 5},
+        ]
+    )
+
+    enriched = enrich_pair_graph_features(active, pair_stats)
+    quality = build_graph_quality_reports(active, pair_stats)
+    by_pair = enriched.set_index(["driver_id", "customer_id"])
+    metrics = quality["graph_quality"].set_index("metric")["value"]
+
+    assert int(metrics["graph_edges"]) == 0
+    assert int(metrics["component_count"]) == 3
+    assert float(metrics["largest_component_share"]) == 0.3333
+    assert int(by_pair.loc[("d2", "c2"), "linked_pair_count"]) == 0
+    assert int(by_pair.loc[("d1", "c1"), "linked_pair_count"]) == 0
+    assert int(by_pair.loc[("d3", "c3"), "linked_pair_count"]) == 0
+
+
+def test_graph_support_requires_temporal_overlap_for_shared_entities() -> None:
+    active = pd.DataFrame(
+        [
+            {
+                "order_id": "o1",
+                "driver_id": "d1",
+                "customer_id": "c1",
+                "payment_method": "wallet",
+                "promotion_code": "P1",
+                "pickup_address": "A",
+                "last_dropoff_address": "B",
+                "route_key": "A -> B",
+                "order_date": "2026-07-24",
+            },
+            {
+                "order_id": "o2",
+                "driver_id": "d1",
+                "customer_id": "c1",
+                "payment_method": "wallet",
+                "promotion_code": "P1",
+                "pickup_address": "A",
+                "last_dropoff_address": "B",
+                "route_key": "A -> B",
+                "order_date": "2026-07-24",
+            },
+            {
+                "order_id": "o3",
+                "driver_id": "d2",
+                "customer_id": "c2",
+                "payment_method": "wallet",
+                "promotion_code": "P1",
+                "pickup_address": "A",
+                "last_dropoff_address": "B",
+                "route_key": "A -> B",
+                "order_date": "2026-07-29",
+            },
+            {
+                "order_id": "o4",
+                "driver_id": "d2",
+                "customer_id": "c2",
+                "payment_method": "wallet",
+                "promotion_code": "P1",
+                "pickup_address": "A",
+                "last_dropoff_address": "B",
+                "route_key": "A -> B",
+                "order_date": "2026-07-29",
+            },
+        ]
+    )
+    pair_stats = pd.DataFrame(
+        [
+            {"driver_id": "d1", "customer_id": "c1", "pair_core_score": 70.0, "pair_collusion_score": 70.0, "suspected_ghost_score": 80.0, "n_trips": 5},
+            {"driver_id": "d2", "customer_id": "c2", "pair_core_score": 65.0, "pair_collusion_score": 65.0, "suspected_ghost_score": 75.0, "n_trips": 4},
+        ]
+    )
+
+    enriched = enrich_pair_graph_features(active, pair_stats)
+    quality = build_graph_quality_reports(active, pair_stats)
+    by_pair = enriched.set_index(["driver_id", "customer_id"])
+    metrics = quality["graph_quality"].set_index("metric")["value"]
+
+    assert int(metrics["graph_edges"]) == 0
+    assert int(metrics["component_count"]) == 2
+    assert int(by_pair.loc[("d1", "c1"), "linked_pair_count"]) == 0
+    assert int(by_pair.loc[("d2", "c2"), "linked_pair_count"]) == 0

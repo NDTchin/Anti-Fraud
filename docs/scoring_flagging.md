@@ -1,438 +1,188 @@
-# Báo Cáo Chấm Điểm Và Gắn Cờ Hiện Tại Của Project
+# Scoring Va Flagging Theo Huong Moi Cua Project
 
-## Phạm vi tài liệu
+## Pham vi tai lieu
 
-Tài liệu này mô tả trạng thái chấm điểm và gắn cờ hiện tại của project sau khi đã áp dụng thêm graph support cho `ride` vào Tuesday, July 28, 2026.
+Tai lieu nay mo ta cach nen to chuc scoring va flagging khi project duoc lam lai theo huong:
 
-Phần được xác nhận trực tiếp từ source code hiện có trong repo nằm chủ yếu tại:
+- `docs/graph_algorithms_for_driver_customer_ghost_trip_collusion.md`
 
-- `src/algorithms/ride_collusion_graph.py`
-- `src/rules/ride_kbc_rules.py`
-- `src/scoring/ride_collusion_scoring.py`
-- `scripts/build_task3_daily_outputs.py`
-- `tests/test_ride_collusion_rules.py`
-- `src/dashboard/app.py`
-- `src/dashboard/kbc_daily_dashboard.py`
+Muc tieu la tach ro:
 
-## Kết luận nhanh
+- `graph core`
+- `optional enrichment`
+- `flagging output`
 
-Ở thời điểm hiện tại, pipeline chấm điểm rõ ràng và hoàn chỉnh nhất trong repo là pipeline `ride` cho rule:
+Tai lieu nay khong dong nhat voi implementation lich su. No la dinh huong scoring/flagging can phu hop voi kien truc moi.
 
-- `REPEATED_CUSTOMER_DRIVER`
+Ngay cap nhat: `2026-08-05`
 
-Pipeline này hiện đã đi theo mô hình 3 lớp:
+## Ket luan nhanh
 
-1. rule-based pair scoring
-2. graph-based pair support scoring
-3. order-level flagging
+Scoring nen duoc to chuc thanh 3 lop:
 
-Nói ngắn gọn:
+1. `pair core score`
+2. `network support score`
+3. `investigation priority`
 
-- phát hiện ở level `driver_id - customer_id`
-- chấm điểm nền bằng rule
-- nâng điểm bằng graph support
-- materialize kết quả xuống `flagged_orders`
+Trong do:
 
-## 1. Kiến trúc scoring hiện tại cho `ride`
+- `pair core score` den tu `weighted edge outlier detection` va `bipartite concentration scoring`
+- `network support score` den tu suspicious graph va `WCC`
+- `investigation priority` la diem cuoi de xep thu tu review
 
-### 1.1. Đơn vị phân tích chính
+Flagging van nen materialize xuong cap `order`, nhung logic phat hien va cham diem phai duoc xac lap o cap `driver-customer pair`.
 
-Đơn vị phân tích trung tâm là cặp:
+## 1. Don vi scoring chinh
+
+Don vi scoring trung tam la pair:
 
 - `driver_id`
 - `customer_id`
 
-Đây là lựa chọn hợp lý vì pattern collusion trong `ride` hiện đang tập trung vào:
+Ly do:
 
-- repeated pair
-- ghost trip
-- superfast turnaround
-- route loop
+- collusion trong bai toan nay xuat hien tren quan he lap lai giua hai dau mut
+- scoring o cap order rat de bi nhieu va kho nhin ra pattern lap
+- pair scoring cho phep gan network context de mo case dieu tra
 
-### 1.2. Đơn vị gắn cờ đầu ra
+## 2. Graph core scoring
 
-Sau khi một pair bị xem là nghi vấn, toàn bộ order của pair đó trong cửa sổ phân tích sẽ được đưa vào:
+## 2.1. Pair core score
 
-- `flagged_orders.parquet`
+`pair_core_score` nen duoc xay tu 2 thanh phan bat buoc:
 
-Vì vậy:
+- `volume_score`
+- `concentration_score`
 
-- scoring diễn ra ở cấp `pair`
-- review list được xuất ở cấp `order`
+Y nghia:
 
-## 2. Thuật toán phát hiện pair nghi vấn
+- `volume_score` tra loi pair co lap lai bat thuong hay khong
+- `concentration_score` tra loi pair co dang "dinh" vao nhau bat thuong hay khong
 
-Phần này nằm ở [ride_collusion_graph.py](/D:/VSF/src/algorithms/ride_collusion_graph.py).
+Tai lieu huong moi khuyen nghi uu tien 2 diem nay truoc moi signal khac.
 
-### 2.1. Lọc active orders
+## 2.2. Suspicious pair rule
 
-Project giữ lại các order:
+Mot pair nen duoc dua vao suspicious list neu:
 
-- có `driver_id`
-- có `customer_id`
-- có `order_time_local_tz`
-- không bị hủy, tức `is_cancelled = 0`
+- `volume_score` cao
+- hoac `concentration_score` cao
+- hoac ca hai
 
-Sau đó tạo thêm:
+Neu can mot ban MVP de trien khai nhanh, co the dung rule don gian:
 
-- `is_ghost = (avg_kmh == 0)`
-- `route_key = pickup_address -> last_dropoff_address`
+- `trip_count` nam o tail cua phan phoi
+- va `pair_share_driver` hoac `pair_share_customer` vuot nguong
 
-### 2.2. Gom theo pair
+## 2.3. Network support score
 
-Project group theo:
+Sau khi co suspicious pair list, build suspicious graph va chay `WCC`.
 
-- `driver_id`
-- `customer_id`
+Tu do sinh cac metric ho tro:
 
-và tính các tín hiệu:
+- `component_id`
+- `component_size`
+- `linked_pair_count`
+- so loai shared entities ho tro
 
-- `n_trips`
-- `n_ghost`
+Nhung metric nay nen duoc tong hop thanh:
+
+- `network_support_score`
+
+Day khong phai first-pass detector. No la lop bo sung de biet:
+
+- pair do dung mot minh
+- hay nam trong cum co ha tang dung chung
+
+## 3. Diem cuoi cung nen duoc dinh nghia the nao
+
+Thay vi tron qua nhieu logic ngay tu dau, nen tach ro:
+
+- `pair_core_score`
+- `network_support_score`
+- `priority_score`
+
+Trong do:
+
+- `pair_core_score` la diem chinh de quyet dinh pair co dang review hay khong
+- `network_support_score` la diem nang uu tien dieu tra
+- `priority_score` la diem sap hang cuoi cung cho analyst
+
+Nguyen tac:
+
+- khong de network support thay the pair evidence
+- khong de enrichment lam mo 2 signal cot loi
+- pair co evidence manh phai van noi bat ke ca khi component nho
+
+## 4. Cac signal enrichment nen dat dung vi tri
+
+Trong huong moi, cac signal sau van nen duoc giu, nhung dung o vai tro enrichment:
+
 - `ghost_rate`
 - `min_gap_min`
-- `avg_gmv`
-- `total_gmv`
-- `total_discount`
-- `active_days`
-- `latest_order_date`
-- `pair_share_driver`
-- `pair_share_customer`
-- `dominant_route_key`
 - `dominant_route_share`
+- route template reuse
 
-### 2.3. Shortlist theo quantile
+Nen dung chung de:
 
-Project tính:
+- tang precision
+- tang explainability cho analyst
+- uu tien review trong cung mot component
 
-- `trip_threshold = quantile(0.9999)` của `n_trips`
+Khong nen de chung tro thanh trung tam kien truc scoring.
 
-và chỉ giữ:
+## 5. Risk tier va flagging
 
-- các pair có `n_trips > trip_threshold`
+`risk_tier` nen phan anh muc do uu tien review, khong phai ket luan fraud.
 
-Đây là bước shortlist đầu tiên để giảm nhiễu.
+Goi y phan lop:
 
-## 3. Rule-based scoring hiện tại
+- `HIGH`: pair core score cao va co them network support hoac enrichment manh
+- `MEDIUM`: pair core score ro rang nhung network support vua phai
+- `WATCHLIST`: pair duoc shortlist nhung can them bang chung
 
-Phần này nằm ở:
+Co the giu dau ra cap order vi analyst thuong review tren order timeline, nhung can hieu:
 
-- [ride_kbc_rules.py](/D:/VSF/src/rules/ride_kbc_rules.py)
-- [ride_collusion_scoring.py](/D:/VSF/src/scoring/ride_collusion_scoring.py)
+- phat hien o cap pair
+- clustering o cap network
+- materialization o cap order
 
-### 3.1. Các reason code hiện tại
+## 6. Output nen duoc duy tri
 
-Project hiện đang gắn các lý do:
+Mot pipeline scoring/flagging theo huong moi nen xuat toi thieu:
 
-- `KB-C_EXTREME_VOLUME`
-- `KB-C_HIGH_GHOST_RATE`
-- `KB-C_SUPERFAST_GAP`
-- `KB-C_TIGHT_PAIR_SHARE`
-- `KB-C_ROUTE_LOOP`
+- `pair_summary`
+- `pair_reasons`
+- `suspicious_components`
+- `flagged_orders`
 
-### 3.2. High-confidence logic
+Trong do:
 
-Project hiện gắn:
+- `pair_summary` la bang trung tam de cham diem va rank
+- `pair_reasons` giai thich tai sao pair bi shortlist
+- `suspicious_components` phuc vu mo case cluster
+- `flagged_orders` phuc vu review van hanh
 
-- `high_confidence = (ghost_rate > 0.3) OR (min_gap_min < 5)`
+## 7. Cach doc score cho dung
 
-Đây là lớp severity nhị phân ban đầu.
+Nen dien giai nhu sau:
 
-### 3.3. Rule score nền
+- `pair_core_score`: muc do bat thuong cua chinh pair
+- `network_support_score`: muc do duoc cung co boi network xung quanh
+- `priority_score`: muc do nen review truoc
 
-Hiện tại project đã tách rõ:
+Day la ngon ngu scoring phu hop hon voi huong graph-first moi so voi viec tron nhieu score lich su vao mot nhan chung.
 
-- `rule_score_base`
-- `rule_score`
+## 8. Final recommendation
 
-Trong đó:
+Neu update pipeline scoring/flagging theo huong moi, thu tu uu tien nen la:
 
-- `rule_score_base` là điểm từ rule trước khi thêm graph support
-- `rule_score` hiện được dùng làm điểm cuối cùng sau khi đã rescore
+1. chot pair table
+2. chot `volume_score`
+3. chot `concentration_score`
+4. chot suspicious pair rule
+5. build suspicious graph
+6. chot `WCC`
+7. moi them enrichment va risk tier
 
-### 3.4. Công thức `rule_score_base`
-
-Project tính 5 thành phần strength:
-
-- `trip_strength`
-- `ghost_strength`
-- `fast_gap_strength`
-- `share_strength`
-- `route_strength`
-
-và dùng công thức:
-
-```python
-score = 100 * (
-    0.35 * trip_strength
-    + 0.25 * ghost_strength
-    + 0.20 * fast_gap_strength
-    + 0.10 * share_strength
-    + 0.10 * route_strength
-)
-```
-
-Ý nghĩa:
-
-- volume cực trị là tín hiệu mạnh nhất
-- sau đó là ghost-rate
-- tiếp theo là superfast gap
-- share và route đóng vai trò bổ trợ
-
-## 4. Graph algorithm đã được áp dụng cho `ride`
-
-Phần này là thay đổi quan trọng nhất đã được triển khai.
-
-### 4.1. Shared-entity concentration
-
-Project hiện đã thêm graph support dựa trên shared entities của các pair nghi vấn:
-
-- `payment_method`
-- `promotion_code`
-- `pickup_address`
-- `last_dropoff_address`
-- `route_key`
-
-Mỗi loại shared entity được dùng để nối pair với pair khác nếu:
-
-- cùng tham chiếu tới một entity giống nhau
-- entity đó không quá phổ biến
-
-Hiện tại đang có các ngưỡng mặc định:
-
-- `payment_max_degree = 150`
-- `promo_max_degree = 200`
-- `address_max_degree = 50`
-- `route_max_degree = 50`
-
-### 4.2. Graph component grouping
-
-Sau khi nối các pair qua shared entities, project build một graph pair-level và chạy:
-
-- `connected_components()` bằng `networkx`
-
-Về mặt ý tưởng, đây là bước cluster baseline tương đương với grouping kiểu `WCC` trên suspicious pair graph.
-
-Mỗi pair hiện có thêm:
-
-- `component_id`
-- `component_size`
-- `component_edge_count`
-- `component_density`
-
-### 4.3. Pair-level graph support metrics
-
-Project hiện tính thêm các feature graph sau:
-
-- `shared_payment_count`
-- `shared_promo_count`
-- `shared_pickup_count`
-- `shared_dropoff_count`
-- `shared_route_count`
-- `supporting_signal_count`
-- `linked_pair_count`
-- `component_size`
-- `component_density`
-
-### 4.4. Graph risk score
-
-Từ các feature trên, project sinh:
-
-- `graph_risk_score`
-
-Điểm này được tạo từ tổ hợp:
-
-- số pair liên kết
-- số loại tín hiệu shared support
-- kích thước component
-- mật độ component
-
-Hiện tại công thức đang thiên về:
-
-- `linked_pair_count`
-- `supporting_signal_count`
-
-nhiều hơn là density thuần túy.
-
-## 5. Final scoring hiện tại
-
-Sau khi có `rule_score_base` và `graph_risk_score`, project tạo:
-
-- `final_risk_score`
-
-Logic hiện tại là:
-
-- trước hết blend `rule_score_base` với `graph_risk_score`
-- sau đó bảo đảm `final_risk_score` không thấp hơn `rule_score_base`
-
-Điều này có nghĩa:
-
-- graph support chỉ nâng hoặc giữ nguyên điểm nền
-- graph support không kéo điểm của một pair đang đã mạnh theo rule xuống thấp hơn
-
-Cuối cùng:
-
-- `rule_score = final_risk_score`
-
-để dashboard và report dùng ngay điểm mới.
-
-## 6. Risk tier hiện tại
-
-Project hiện không còn map `risk_tier` chỉ bằng `high_confidence` như trước.
-
-Hiện tại:
-
-- `HIGH` nếu `high_confidence = True` và `final_risk_score >= 75`
-- `MEDIUM` nếu `final_risk_score >= 60`
-- còn lại là `WATCHLIST`
-
-Điều này làm `risk_tier` phản ánh tốt hơn cả:
-
-- mức độ mạnh của rule
-- mức độ được graph support
-
-## 7. Cách gắn cờ order hiện tại
-
-Phần này vẫn nằm ở [ride_collusion_scoring.py](/D:/VSF/src/scoring/ride_collusion_scoring.py).
-
-### 7.1. Materialize từ pair xuống order
-
-Sau khi pair bị flag, project join ngược với `active_orders` theo:
-
-- `driver_id`
-- `customer_id`
-
-Mỗi order được gắn thêm:
-
-- `rule_name`
-- `reason_code`
-- `flag_reason`
-- `supporting_signal`
-- `rule_score_base`
-- `graph_risk_score`
-- `final_risk_score`
-- `risk_tier`
-- `linked_pair_count`
-- `supporting_signal_count`
-- `component_id`
-- `component_size`
-- `component_density`
-
-### 7.2. Một order có thể có nhiều dòng flag
-
-Do một pair có thể thỏa nhiều `reason_code`, một `order_id` có thể xuất hiện nhiều dòng trong `flagged_orders`.
-
-Vì vậy:
-
-- `flagged_rows` không bằng số order duy nhất
-- dashboard phải dùng `nunique()` hoặc `drop_duplicates(["order_id", "rule_name"])`
-
-### 7.3. Evidence JSON
-
-Project hiện đã mở rộng `evidence_json` để chứa thêm graph context như:
-
-- `graph_risk_score`
-- `linked_pair_count`
-- `supporting_signal_count`
-- `component_id`
-- `component_size`
-- `component_density`
-
-Điều này giúp analyst không chỉ thấy tín hiệu rule, mà còn thấy pair đó có nằm trong cluster đáng ngờ hay không.
-
-## 8. Đầu ra hiện tại của pipeline `ride`
-
-Script build là:
-
-- [scripts/build_task3_daily_outputs.py](/D:/VSF/scripts/build_task3_daily_outputs.py)
-
-Script này hiện:
-
-1. build pair stats
-2. chấm `rule_score_base`
-3. enrich graph features
-4. sinh `graph_risk_score`
-5. sinh `final_risk_score`
-6. gắn cờ order
-7. ghi report ra `reports/task3`
-
-Các output chính hiện tại:
-
-- `flagged_orders.parquet`
-- `kbc_pair_summary.csv`
-- `kbc_pair_reasons.csv`
-- `daily_rule_summary.csv`
-- `priority_recommendations.csv`
-- `rule_model_comparison.csv`
-- `quality_report.csv`
-- `known_case_evaluation.csv`
-
-## 9. Kết quả build `ride` sau khi rescore
-
-Theo lần build lại trên Tuesday, July 28, 2026:
-
-- active ride orders: `4,767,940`
-- extreme trip threshold: `12.0`
-- candidate pairs: `371`
-- flagged order rows: `11,000`
-- known-pair hit rate: `100%`
-
-Một số chỉ số mới từ `kbc_pair_summary.csv`:
-
-- `graph_risk_score` mean khoảng `76.10`
-- `final_risk_score` mean khoảng `41.80`
-- `component_size` median khoảng `359`
-- `linked_pair_count` mean khoảng `64.20`
-- `supporting_signal_count` mean khoảng `3.12`
-
-Phân bố `risk_tier` mới trong `flagged_orders.parquet`:
-
-- `HIGH`: `144`
-- `MEDIUM`: `742`
-- `WATCHLIST`: `10,114`
-
-## 10. Cách hiểu đúng giữa score và flag
-
-### 10.1. `rule_score_base`
-
-Đây là điểm nền từ pair behavior.
-
-Nó trả lời:
-
-- pair này có bất thường mạnh theo logic KBC hay không
-
-### 10.2. `graph_risk_score`
-
-Đây là điểm support từ neighborhood graph.
-
-Nó trả lời:
-
-- pair này có được củng cố bởi shared payment, shared promo, shared address, shared route, và component suspicious hay không
-
-### 10.3. `final_risk_score`
-
-Đây là điểm ưu tiên review cuối cùng.
-
-Nó trả lời:
-
-- nên xếp pair này ở mức ưu tiên nào khi điều tra
-
-### 10.4. `flagged_orders`
-
-Đây không phải kết luận fraud, mà là shortlist điều tra.
-
-## 11. Kết luận
-
-Trạng thái hiện tại của project có thể chốt như sau:
-
-- `ride` đã không còn chỉ là rule scoring thuần nữa
-- project hiện đã thêm một lớp graph support thật sự vào pair scoring
-- điểm cuối cùng hiện là `final_risk_score`, không còn chỉ là `rule_score` nền
-- `risk_tier` hiện phản ánh cả rule strength lẫn graph support
-- các graph algorithm đang thực sự dùng trong nhánh `ride` hiện tại là:
-  - weighted edge outlier
-  - endpoint concentration
-  - temporal edge anomaly
-  - route reuse scoring
-  - shared-entity concentration
-  - component grouping kiểu connected-components baseline
+Lam nhu vay se giu scoring gon, de explain, va dung trong tam cua bai toan `Driver-Customer Ghost-Trip Collusion`.

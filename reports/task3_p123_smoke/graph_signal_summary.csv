@@ -1,0 +1,6 @@
+signal_type,distinct_entities,eligible_entities,filtered_entities,avg_pair_degree,max_pair_degree,avg_rarity_weight,retained_edge_count
+dropoff,1,0,1,1.0,1,0.8,0
+payment,1,0,1,1.0,1,1.0,0
+pickup,1,0,1,1.0,1,0.8,0
+promo,1,0,1,1.0,1,0.85,0
+route,1,0,1,1.0,1,0.7,0

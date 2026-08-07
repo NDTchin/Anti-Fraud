@@ -1,8 +1,8 @@
 metric,value
-raw_orders,6083536.0
-active_orders,4767940.0
-candidate_pairs,371.0
-trip_threshold_q9999,12.0
-flagged_pairs,371.0
-flagged_rows,11000.0
-high_confidence_pairs,59.0
+raw_orders,9952024.0
+active_orders,7533480.0
+candidate_pairs,1971.0
+trip_threshold_q9999,15.0
+flagged_pairs,1971.0
+flagged_rows,55542.0
+high_confidence_pairs,1510.0

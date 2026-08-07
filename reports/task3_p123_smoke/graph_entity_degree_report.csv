@@ -1,0 +1,6 @@
+signal_type,entity_value,pair_degree,eligible_for_graph,rarity_weight
+dropoff,B,1,False,0.8
+payment,cash,1,False,1.0
+pickup,A,1,False,0.8
+promo,P1,1,False,0.85
+route,A -> B,1,False,0.7

@@ -1,0 +1,10 @@
+metric,value
+candidate_pairs,1.0
+graph_nodes,1.0
+graph_edges,0.0
+component_count,1.0
+largest_component_size,1.0
+largest_component_share,1.0
+isolated_pairs,1.0
+avg_linked_pair_count,0.0
+p90_linked_pair_count,0.0

@@ -473,3 +473,57 @@ Ba thuật toán này không giải quyết toàn bộ fraud problem một mình
 - `WCC` gom thành case groups để điều tra
 
 Đối với trạng thái hiện tại của project, đây là bộ 3 hợp lý nhất để đầu tư trước.
+## 14. Current Implementation Notes
+
+The current implementation in this repo still follows the same 3 algorithms, but adds anti-noise controls so the output is safer on real production-like data.
+
+### 14.1 Weighted Edge Outlier Detection
+
+Current implementation details:
+
+- `volume_score` remains cohort-based
+- `trip_threshold` still comes from the tail of pair `trip_count`
+- high volume is used as seed evidence, not final proof of fraud
+
+### 14.2 Bipartite Concentration Scoring
+
+Current implementation details:
+
+- `raw_concentration = min(pair_share_driver, pair_share_customer)`
+- `expected_share_driver = 1 / (driver_unique_customers + 1)`
+- `expected_share_customer = 1 / (customer_unique_drivers + 1)`
+- `expected_concentration = min(expected_share_driver, expected_share_customer)`
+- `concentration_gap = max(0, (raw_concentration - expected_concentration) / (1 - expected_concentration))`
+- `concentration_score = concentration_gap * support_factor`
+
+Operational note:
+
+- the score now reflects how much a pair exceeds its expected baseline
+- this reduces false positives from pairs that only look concentrated because both sides have low diversity
+
+### 14.3 WCC And Shared-Entity Graph
+
+Current implementation details:
+
+- WCC is still used to create suspicious components
+- shared-entity edges are filtered before entering WCC
+- generic hub-like values are removed before they can inflate a component
+- single weak overlaps no longer create support edges by default
+- shared entities also need temporal proximity to remain connected
+
+Examples of current graph controls:
+
+- ignore generic payment values such as `cash`
+- ignore empty or default addresses such as `(0.000000, 0.000000)`
+- require either:
+  - at least `2` distinct signal types with enough total weight
+  - or a stronger repeated single-signal pattern
+
+### 14.4 Final Scoring Guidance
+
+Current ranking intent:
+
+- ghost-like behavior should dominate the top of the queue
+- pair concentration should confirm collusion strength
+- shared-entity network should support, not overpower, the pair decision
+- business impact should affect investigation priority, not fraud plausibility by itself

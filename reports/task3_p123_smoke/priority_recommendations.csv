@@ -1,0 +1,2 @@
+domain,rule_name,flagged_orders,total_discount,total_gmv,avg_pair_core_score,avg_network_support_score,avg_pair_risk_score,avg_ghost_score,avg_business_impact_score,high_confidence_orders,priority_score,recommendation,model_overlap_rate
+ride,REPEATED_CUSTOMER_DRIVER,3,9000.0,37500.0,46.79999999999999,2.0,52.1,61.93,86.67,3,51.24,"Prioritize pairs with strong pair risk first, then inspect ghost evidence, shared entities, and the wider WCC component before taking action.",0.0

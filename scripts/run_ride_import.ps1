@@ -1,5 +1,5 @@
 param(
-    [string]$Source = "data\handoff\ride\cleaned_orders\orders_ride_clean_2026-07-14_to_17.parquet",
+    [string]$Source = "data\handoff\ride\cleaned_orders\orders_ride_masked_2026-07-2[4-9].parquet",
     [int]$BatchSize = 2000,
     [int]$WaitSeconds = 180
 )
@@ -10,6 +10,8 @@ $Python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $ComposeFile = Join-Path $ProjectRoot "infra\docker-compose.full.yml"
 $ResolvedSource = Join-Path $ProjectRoot $Source
 $env:NEO4J_DOMAIN = "ride"
+$env:NEO4J_RIDE_URI = "bolt://localhost:7687"
+$env:NEO4J_RIDE_BROWSER_URL = "http://localhost:7474/browser/"
 
 Set-Location $ProjectRoot
 

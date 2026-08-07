@@ -166,7 +166,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--source",
         type=Path,
-        default=Path("data/handoff/ride/cleaned_orders/orders_ride_clean_2026-07-14_to_17.parquet"),
+        default=Path("data/handoff/ride/cleaned_orders/orders_ride_masked_2026-07-2[4-9].parquet"),
         help="Ride cleaned-orders file in parquet or csv format.",
     )
     parser.add_argument(
@@ -287,9 +287,10 @@ def wait_for_driver(wait_seconds: int) -> Driver:
     raise TimeoutError(f"Neo4j was not ready after {wait_seconds}s: {last_error}")
 
 
-def ensure_constraints(driver: Driver, cypher_path: Path) -> None:
+def ensure_constraints(driver: Driver, cypher_path: Path, database: str | None = None) -> None:
+    target_database = database or settings.neo4j_database
     for statement in split_cypher(cypher_path.read_text(encoding="utf-8")):
-        driver.execute_query(statement, database_=settings.neo4j_database)
+        driver.execute_query(statement, database_=target_database)
 
 
 def source_batches(path: Path, batch_size: int) -> tuple[int, Any]:
@@ -473,7 +474,7 @@ def main() -> int:
 
     driver = wait_for_driver(args.wait_seconds)
     try:
-        ensure_constraints(driver, args.cypher.resolve())
+        ensure_constraints(driver, args.cypher.resolve(), settings.neo4j_database)
         counters = import_batches(driver, source, args.batch_size)
     finally:
         driver.close()

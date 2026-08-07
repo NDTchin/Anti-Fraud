@@ -49,6 +49,12 @@ FOR (n:TravelMode) REQUIRE n.name IS UNIQUE;
 CREATE CONSTRAINT channel_type_name IF NOT EXISTS
 FOR (n:ChannelType) REQUIRE n.name IS UNIQUE;
 
+CREATE CONSTRAINT suspicious_pair_key IF NOT EXISTS
+FOR (n:SuspiciousPair) REQUIRE n.pair_key IS UNIQUE;
+
+CREATE CONSTRAINT fraud_case_id IF NOT EXISTS
+FOR (n:FraudCase) REQUIRE n.case_id IS UNIQUE;
+
 CREATE INDEX order_time IF NOT EXISTS
 FOR (n:Order) ON (n.order_time);
 

@@ -16,6 +16,7 @@ class KbcRuleConfig:
     tight_pair_share_customer: float = 0.5
     dominant_route_share: float = 0.5
     min_pair_trips_for_share_rule: int = 6
+    min_component_size: int = 2
 
     def validate(self) -> None:
         if not 0 <= self.high_ghost_rate <= 1:
@@ -30,6 +31,8 @@ class KbcRuleConfig:
             raise ValueError("dominant_route_share must be between 0 and 1.")
         if self.min_pair_trips_for_share_rule < 2:
             raise ValueError("min_pair_trips_for_share_rule must be at least 2.")
+        if self.min_component_size < 1:
+            raise ValueError("min_component_size must be at least 1.")
 
 
 def annotate_kbc_signals(pair_stats: pd.DataFrame, config: KbcRuleConfig) -> pd.DataFrame:
@@ -38,9 +41,13 @@ def annotate_kbc_signals(pair_stats: pd.DataFrame, config: KbcRuleConfig) -> pd.
         return pair_stats.copy()
 
     enriched = pair_stats.copy()
+    if "ghost_rate" not in enriched.columns:
+        enriched["ghost_rate"] = 0.0
+    if "min_gap_min" not in enriched.columns:
+        enriched["min_gap_min"] = pd.NA
     return enriched.assign(
         high_confidence=(enriched["ghost_rate"] > config.high_ghost_rate)
-        | (enriched["min_gap_min"] < config.superfast_gap_min)
+        | (pd.to_numeric(enriched["min_gap_min"], errors="coerce") < config.superfast_gap_min)
     )
 
 
@@ -62,38 +69,48 @@ def apply_kbc_rules(pair_stats: pd.DataFrame, config: KbcRuleConfig) -> pd.DataF
         reason_frames.append(subset)
 
     append_reason(
-        enriched["n_trips"] > enriched["trip_threshold"],
+        enriched["is_extreme_volume"],
         "KB-C_EXTREME_VOLUME",
-        "Driver-customer pair exceeds the 0.9999 trip-count threshold in the active 4-day window.",
-        "edge_weight_outlier",
-    )
-    append_reason(
-        enriched["ghost_rate"] > config.high_ghost_rate,
-        "KB-C_HIGH_GHOST_RATE",
-        "Driver-customer pair has a high share of ghost trips with avg_kmh = 0.",
-        "ghost_trip_density",
-    )
-    append_reason(
-        enriched["min_gap_min"] < config.superfast_gap_min,
-        "KB-C_SUPERFAST_GAP",
-        "Driver-customer pair creates consecutive trips too quickly to look operationally normal.",
-        "temporal_turnaround",
+        "Driver-customer pair is an extreme weighted edge in the current analysis window.",
+        "weighted_edge_outlier",
     )
     append_reason(
         (enriched["n_trips"] >= config.min_pair_trips_for_share_rule)
         & (enriched["pair_share_driver"] >= config.tight_pair_share_driver)
         & (enriched["pair_share_customer"] >= config.tight_pair_share_customer),
         "KB-C_TIGHT_PAIR_SHARE",
-        "The pair dominates both the driver's and the customer's trip history in the window.",
+        "The pair absorbs an unusually large share of both the driver and customer activity.",
         "bipartite_pair_concentration",
     )
-    append_reason(
-        (enriched["n_trips"] >= config.min_pair_trips_for_share_rule)
-        & (enriched["dominant_route_share"] >= config.dominant_route_share),
-        "KB-C_ROUTE_LOOP",
-        "The pair repeatedly cycles through the same pickup-dropoff route at suspicious density.",
-        "route_loop_reuse",
-    )
+    if "component_size" in enriched.columns:
+        append_reason(
+            enriched["component_size"] >= config.min_component_size,
+            "KB-C_SUSPICIOUS_COMPONENT",
+            "The suspicious pair belongs to a connected component with shared supporting entities.",
+            "wcc_component_support",
+        )
+    if "ghost_rate" in enriched.columns:
+        append_reason(
+            enriched["ghost_rate"] > config.high_ghost_rate,
+            "KB-C_HIGH_GHOST_RATE",
+            "Driver-customer pair has a high share of ghost trips with avg_kmh = 0.",
+            "ghost_trip_density",
+        )
+    if "min_gap_min" in enriched.columns:
+        append_reason(
+            pd.to_numeric(enriched["min_gap_min"], errors="coerce") < config.superfast_gap_min,
+            "KB-C_SUPERFAST_GAP",
+            "Driver-customer pair creates consecutive trips too quickly to look operationally normal.",
+            "temporal_turnaround",
+        )
+    if "dominant_route_share" in enriched.columns:
+        append_reason(
+            (enriched["n_trips"] >= config.min_pair_trips_for_share_rule)
+            & (enriched["dominant_route_share"] >= config.dominant_route_share),
+            "KB-C_ROUTE_LOOP",
+            "The pair repeatedly cycles through the same pickup-dropoff route at suspicious density.",
+            "route_loop_reuse",
+        )
 
     if not reason_frames:
         return pd.DataFrame()

@@ -1,0 +1,2 @@
+component_id,driver_count,customer_count,pair_count,high_risk_pair_count,average_pair_score,maximum_pair_score,rare_shared_entity_count,weighted_internal_edge_sum,component_density,network_risk_score,high_risk_pair_ratio,component_risk_tier
+ride_component_1,1,1,1,0,44.62,44.62,0,0,0.0,2.0,0.0,LOW_PRIORITY
