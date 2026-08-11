@@ -1,2 +1,0 @@
-domain,rule_name,flagged_orders,flagged_customers,avg_priority_score,avg_network_support_score,avg_pair_risk_score,avg_ghost_score,model_overlap_orders,model_overlap_rate
-ride,REPEATED_CUSTOMER_DRIVER,19594,1922,40.128680718587326,42.19770490966622,34.694860671634174,31.174375318975194,0,0.0

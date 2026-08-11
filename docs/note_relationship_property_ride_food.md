@@ -12,8 +12,6 @@ Muc tieu la lam ro:
 - du lieu nao la `shared-entity support`
 - du lieu nao la `optional enrichment`
 
-Tai lieu nay khong co muc tieu de thiet ke schema hoan toan moi. No giup doc schema hien co theo dung uu tien nghiep vu moi.
-
 ## Ket luan nhanh
 
 Trong huong moi, schema order graph nen duoc hieu theo 3 lop:

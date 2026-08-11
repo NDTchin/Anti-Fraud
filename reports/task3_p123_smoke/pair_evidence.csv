@@ -1,4 +1,0 @@
-pair_id,driver_id,customer_id,evidence_type,observed_value,expected_value,threshold,score_contribution,data_quality_level,description
-d1||c1,d1,c1,KB-C_EXTREME_VOLUME,3.0,,cohort_trip_threshold,53.03,derived,Driver-customer pair is an extreme weighted edge in the current analysis window.
-d1||c1,d1,c1,KB-C_HIGH_GHOST_RATE,0.6666666666666666,,0.3,53.03,derived,Driver-customer pair has a high share of ghost trips with avg_kmh = 0.
-d1||c1,d1,c1,KB-C_SUPERFAST_GAP,2.0,,5.0,53.03,derived,Driver-customer pair creates consecutive trips too quickly to look operationally normal.

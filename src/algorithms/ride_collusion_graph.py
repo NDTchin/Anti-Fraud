@@ -26,9 +26,12 @@ class RideCollusionGraphConfig:
 
 @dataclass(frozen=True)
 class SuspiciousPairConfig:
-    min_pair_trips: int = 2
-    min_concentration_score: float = 0.75
-    min_pair_core_score: float = 40.0
+    min_pair_trips: int = 4
+    min_concentration_score: float = 0.85
+    min_pair_core_score: float = 50.0
+    min_ghost_rate: float = 0.5
+    min_repeat_share_driver: float = 0.4
+    min_repeat_share_customer: float = 0.6
 
     def validate(self) -> None:
         if self.min_pair_trips < 1:
@@ -37,6 +40,12 @@ class SuspiciousPairConfig:
             raise ValueError("min_concentration_score must be between 0 and 1.")
         if not 0 <= self.min_pair_core_score <= 100:
             raise ValueError("min_pair_core_score must be between 0 and 100.")
+        if not 0 <= self.min_ghost_rate <= 1:
+            raise ValueError("min_ghost_rate must be between 0 and 1.")
+        if not 0 <= self.min_repeat_share_driver <= 1:
+            raise ValueError("min_repeat_share_driver must be between 0 and 1.")
+        if not 0 <= self.min_repeat_share_customer <= 1:
+            raise ValueError("min_repeat_share_customer must be between 0 and 1.")
 
 
 def ensure_datetime(series: pd.Series) -> pd.Series:
@@ -305,13 +314,22 @@ def shortlist_suspicious_pairs(
     core_score = pair_stats["pair_core_score"] if "pair_core_score" in pair_stats.columns else 100 * (
         0.45 * pair_stats["volume_score"] + 0.55 * pair_stats["concentration_score"]
     )
+    repeat_share_mask = (
+        pair_stats["pair_share_driver"].ge(suspicion_config.min_repeat_share_driver)
+        | pair_stats["pair_share_customer"].ge(suspicion_config.min_repeat_share_customer)
+    )
+    strong_repeat_mask = (
+        pair_stats["is_extreme_volume"]
+        & repeat_share_mask
+        & (
+            pair_stats["concentration_score"].ge(suspicion_config.min_concentration_score)
+            | core_score.ge(suspicion_config.min_pair_core_score)
+        )
+    )
+    strong_ghost_mask = pair_stats["ghost_rate"].ge(suspicion_config.min_ghost_rate)
     suspicious_mask = (
         (pair_stats["n_trips"] >= suspicion_config.min_pair_trips)
-        & (
-            pair_stats["is_extreme_volume"]
-            | (pair_stats["concentration_score"] >= suspicion_config.min_concentration_score)
-            | (core_score >= suspicion_config.min_pair_core_score)
-        )
+        & (strong_repeat_mask | strong_ghost_mask)
     )
     return pair_stats.loc[suspicious_mask].copy().sort_values(
         ["pair_core_score", "n_trips", "concentration_score"],
@@ -336,13 +354,12 @@ def enrich_suspicious_pair_details(
         on=["driver_id", "customer_id"],
         how="inner",
     ).copy()
-    candidate_orders = candidate_orders.sort_values(["driver_id", "customer_id", "order_time_local_tz"]).assign(
-        gap_min=(
-            candidate_orders.groupby(["driver_id", "customer_id"], dropna=False)["order_time_local_tz"]
-            .diff()
-            .dt.total_seconds()
-            .div(60.0)
-        )
+    candidate_orders = candidate_orders.sort_values(["driver_id", "customer_id", "order_time_local_tz"]).reset_index(drop=True)
+    candidate_orders["gap_min"] = (
+        candidate_orders.groupby(["driver_id", "customer_id"], dropna=False)["order_time_local_tz"]
+        .diff()
+        .dt.total_seconds()
+        .div(60.0)
     )
 
     gap_stats = (

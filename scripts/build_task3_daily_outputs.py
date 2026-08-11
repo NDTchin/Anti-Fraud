@@ -16,18 +16,13 @@ from src.algorithms.ride_collusion_graph import (
 )
 from src.rules.ride_kbc_rules import KbcRuleConfig, annotate_kbc_signals, apply_kbc_rules
 from src.scoring.ride_collusion_scoring import (
-    build_component_case_summary,
-    build_graph_quality_reports,
-    build_pair_evidence,
     build_pair_scoring_features,
     build_flagged_orders,
-    build_priority_recommendations,
-    build_quality_report,
-    build_rule_model_comparison,
     enrich_pair_graph_features,
     evaluate_known_pairs,
+    finalize_business_rule_assignment,
     score_pairs,
-    summarize_daily_flags,
+    score_business_rules,
 )
 
 
@@ -60,6 +55,20 @@ ORDER_COLUMNS = [
     "payment_method",
     "order_date",
 ]
+
+STALE_REPORT_FILES = {
+    "anomaly_scores.parquet",
+    "daily_rule_summary.csv",
+    "graph_entity_degree_report.csv",
+    "graph_quality_report.csv",
+    "graph_signal_summary.csv",
+    "known_case_evaluation.csv",
+    "pair_evidence.csv",
+    "priority_recommendations.csv",
+    "quality_report.csv",
+    "rule_model_comparison.csv",
+    "suspicious_components.csv",
+}
 
 
 def _resolve_input_paths(path: Path) -> list[Path]:
@@ -246,7 +255,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_outputs(input_path: Path, report_dir: Path, known_pairs_path: Path) -> dict[str, pd.DataFrame]:
+def _build_outputs_for_single_input(input_path: Path, known_pairs_path: Path) -> dict[str, pd.DataFrame]:
     graph_config = RideCollusionGraphConfig()
     rule_config = KbcRuleConfig()
     all_pair_stats, raw_order_count, active_order_count, trip_threshold = _build_pair_stats_streaming(input_path, graph_config)
@@ -258,39 +267,38 @@ def build_outputs(input_path: Path, report_dir: Path, known_pairs_path: Path) ->
     suspicious_pairs = annotate_kbc_signals(suspicious_pairs, rule_config)
     suspicious_pairs = build_pair_scoring_features(suspicious_pairs)
     suspicious_pairs = enrich_pair_graph_features(candidate_orders, suspicious_pairs)
-    graph_reports = build_graph_quality_reports(candidate_orders, suspicious_pairs)
+    suspicious_pairs = score_business_rules(suspicious_pairs)
     pair_reason_rows = apply_kbc_rules(suspicious_pairs, rule_config)
+    suspicious_pairs = finalize_business_rule_assignment(suspicious_pairs, pair_reason_rows)
+    if not pair_reason_rows.empty:
+        pair_reason_rows = pair_reason_rows.merge(
+            suspicious_pairs[
+                [
+                    "driver_id",
+                    "customer_id",
+                    "primary_business_rule",
+                    "primary_business_rule_label",
+                    "primary_business_rule_story",
+                    "primary_business_rule_score",
+                    "triggered_business_rules",
+                    "triggered_reason_codes",
+                    "repeated_pair_rule_score",
+                    "ghost_trip_rule_score",
+                    "route_farming_rule_score",
+                    "network_pattern_rule_score",
+                ]
+            ],
+            on=["driver_id", "customer_id"],
+            how="left",
+            suffixes=("", "_pair"),
+        )
     flagged_orders = build_flagged_orders(candidate_orders, pair_reason_rows)
-
-    daily_summary = summarize_daily_flags(flagged_orders)
-    comparison = build_rule_model_comparison(flagged_orders)
-    recommendations = build_priority_recommendations(flagged_orders)
-    quality = build_quality_report(raw_order_count, active_order_count, suspicious_pairs, trip_threshold, flagged_orders)
     known_pairs = pd.read_csv(known_pairs_path) if known_pairs_path.exists() else pd.DataFrame()
     known_case_evaluation = evaluate_known_pairs(flagged_orders, known_pairs)
     pair_summary = suspicious_pairs.sort_values(["priority_score", "pair_core_score", "n_trips"], ascending=False)
     pair_summary = pair_summary.drop(columns=[column for column in LEGACY_SCORE_COLUMNS if column in pair_summary.columns], errors="ignore")
     pair_reason_rows = pair_reason_rows.drop(columns=[column for column in LEGACY_SCORE_COLUMNS if column in pair_reason_rows.columns], errors="ignore")
     flagged_orders = flagged_orders.drop(columns=[column for column in LEGACY_SCORE_COLUMNS if column in flagged_orders.columns], errors="ignore")
-    suspicious_components = build_component_case_summary(suspicious_pairs)
-    pair_evidence = build_pair_evidence(pair_reason_rows)
-
-    report_dir.mkdir(parents=True, exist_ok=True)
-    daily_summary.to_csv(report_dir / "daily_rule_summary.csv", index=False)
-    comparison.to_csv(report_dir / "rule_model_comparison.csv", index=False)
-    recommendations.to_csv(report_dir / "priority_recommendations.csv", index=False)
-    quality.to_csv(report_dir / "quality_report.csv", index=False)
-    graph_reports["graph_quality"].to_csv(report_dir / "graph_quality_report.csv", index=False)
-    graph_reports["graph_signal_summary"].to_csv(report_dir / "graph_signal_summary.csv", index=False)
-    graph_reports["graph_entity_degree_report"].to_csv(report_dir / "graph_entity_degree_report.csv", index=False)
-    flagged_orders.to_parquet(report_dir / "flagged_orders.parquet", index=False)
-    pair_summary.to_csv(report_dir / "kbc_pair_summary.csv", index=False)
-    pair_reason_rows.to_csv(report_dir / "kbc_pair_reasons.csv", index=False)
-    suspicious_components.to_csv(report_dir / "suspicious_components.csv", index=False)
-    pair_evidence.to_csv(report_dir / "pair_evidence.csv", index=False)
-    if not known_case_evaluation.empty:
-        known_case_evaluation.to_csv(report_dir / "known_case_evaluation.csv", index=False)
-
     return {
         "raw_order_count": pd.DataFrame([{"value": raw_order_count}]),
         "active_order_count": pd.DataFrame([{"value": active_order_count}]),
@@ -299,16 +307,53 @@ def build_outputs(input_path: Path, report_dir: Path, known_pairs_path: Path) ->
         "pair_stats": suspicious_pairs,
         "pair_reason_rows": pair_reason_rows,
         "flagged_orders": flagged_orders,
-        "daily_summary": daily_summary,
-        "comparison": comparison,
-        "recommendations": recommendations,
-        "quality": quality,
-        "graph_quality": graph_reports["graph_quality"],
-        "graph_signal_summary": graph_reports["graph_signal_summary"],
-        "graph_entity_degree_report": graph_reports["graph_entity_degree_report"],
-        "suspicious_components": suspicious_components,
-        "pair_evidence": pair_evidence,
         "known_case_evaluation": known_case_evaluation,
+    }
+
+
+def _concat_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
+    valid_frames = [frame for frame in frames if frame is not None and not frame.empty]
+    if not valid_frames:
+        return pd.DataFrame()
+    return pd.concat(valid_frames, ignore_index=True)
+
+
+def build_outputs(input_path: Path, report_dir: Path, known_pairs_path: Path) -> dict[str, pd.DataFrame]:
+    input_paths = _resolve_input_paths(input_path)
+    per_day_outputs = [_build_outputs_for_single_input(single_input_path, known_pairs_path) for single_input_path in input_paths]
+
+    raw_order_total = sum(
+        int(output["raw_order_count"].iloc[0]["value"]) for output in per_day_outputs if not output["raw_order_count"].empty
+    )
+    active_order_total = sum(
+        int(output["active_order_count"].iloc[0]["value"]) for output in per_day_outputs if not output["active_order_count"].empty
+    )
+
+    combined_candidate_orders = _concat_frames([output["candidate_orders"] for output in per_day_outputs])
+    combined_all_pair_stats = _concat_frames([output["all_pair_stats"] for output in per_day_outputs])
+    combined_pair_stats = _concat_frames([output["pair_stats"] for output in per_day_outputs])
+    combined_pair_reason_rows = _concat_frames([output["pair_reason_rows"] for output in per_day_outputs])
+    combined_flagged_orders = _concat_frames([output["flagged_orders"] for output in per_day_outputs])
+    combined_known_case_evaluation = _concat_frames([output["known_case_evaluation"] for output in per_day_outputs])
+
+    report_dir.mkdir(parents=True, exist_ok=True)
+    combined_flagged_orders.to_parquet(report_dir / "flagged_orders.parquet", index=False)
+    combined_pair_stats.to_csv(report_dir / "kbc_pair_summary.csv", index=False)
+    combined_pair_reason_rows.to_csv(report_dir / "kbc_pair_reasons.csv", index=False)
+    for filename in sorted(STALE_REPORT_FILES):
+        stale_path = report_dir / filename
+        if stale_path.exists():
+            stale_path.unlink()
+
+    return {
+        "raw_order_count": pd.DataFrame([{"value": raw_order_total}]),
+        "active_order_count": pd.DataFrame([{"value": active_order_total}]),
+        "candidate_orders": combined_candidate_orders,
+        "all_pair_stats": combined_all_pair_stats,
+        "pair_stats": combined_pair_stats,
+        "pair_reason_rows": combined_pair_reason_rows,
+        "flagged_orders": combined_flagged_orders,
+        "known_case_evaluation": combined_known_case_evaluation,
     }
 
 

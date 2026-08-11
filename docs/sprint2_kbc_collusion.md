@@ -129,6 +129,19 @@ Thu tu trien khai de tranh scope creep:
 
 Khong nen dung chung de dinh nghia graph scope chinh.
 
+## Operational update sau khi siet pipeline
+
+Sau khi pipeline duoc cap nhat trong repo vao `2026-08-11`, co them vai tro van hanh can ghi nhan:
+
+- `ghost_rate` van co the dua pair vao shortlist neu qua manh
+- `min_gap_min` chi con co gia tri khi duoc tinh dung sau khi sort va khi gap khong am
+- network component khong duoc dung nhu bang chung doc lap de ket luan pair fraud
+
+Vi vay, khi doc Sprint 2 theo trang thai hien tai cua repo, nen hieu:
+
+- `graph core MVP` van khong doi
+- nhung cac default gates da duoc siet lai de output an toan hon cho du lieu gan production
+
 ## Success criteria
 
 Sprint 2 duoc xem la dat huong dung neu:

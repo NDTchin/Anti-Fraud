@@ -7,11 +7,19 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 
+from src.rules.ride_kbc_rules import BUSINESS_RULE_GHOST_TRIP, BUSINESS_RULE_LABELS, BUSINESS_RULE_NETWORK, BUSINESS_RULE_REPEATED_PAIR, BUSINESS_RULE_ROUTE_FARMING, BUSINESS_RULE_STORIES
+
 
 def _safe_float(value: object, default: float = 0.0) -> float:
     if value is None or pd.isna(value):
         return default
     return float(value)
+
+
+def _numeric_series(frame: pd.DataFrame, column: str, default: float = 0.0) -> pd.Series:
+    if column in frame.columns:
+        return pd.to_numeric(frame[column], errors="coerce").fillna(default)
+    return pd.Series(default, index=frame.index, dtype=float)
 
 
 def score_pairs(pair_stats: pd.DataFrame) -> pd.DataFrame:
@@ -87,6 +95,81 @@ def build_pair_scoring_features(pair_stats: pd.DataFrame) -> pd.DataFrame:
         business_impact_score=business_impact.round(2),
         fraud_risk_score=pair_risk_score.round(2),
         investigation_priority_score=pair_risk_score.round(2),
+    )
+
+
+def score_business_rules(pair_stats: pd.DataFrame) -> pd.DataFrame:
+    if pair_stats.empty:
+        result = pair_stats.copy()
+        for column in (
+            "repeated_pair_rule_score",
+            "ghost_trip_rule_score",
+            "route_farming_rule_score",
+            "network_pattern_rule_score",
+            "business_rule",
+            "business_rule_label",
+            "business_rule_story",
+            "business_rule_score",
+        ):
+            result[column] = pd.Series(dtype=float if column.endswith("_score") else "string")
+        return result
+
+    enriched = pair_stats.copy()
+    pair_collusion_score = _numeric_series(enriched, "pair_collusion_score")
+    pair_core_score = _numeric_series(enriched, "pair_core_score")
+    pair_collusion_score = pair_collusion_score.where(pair_collusion_score.notna(), pair_core_score)
+    concentration_score = _numeric_series(enriched, "concentration_score")
+    volume_score = _numeric_series(enriched, "volume_score")
+    suspected_ghost_score = _numeric_series(enriched, "suspected_ghost_score")
+    temporal_score = _numeric_series(enriched, "temporal_score")
+    ghost_rate = _numeric_series(enriched, "ghost_rate")
+    repeated_pair_rule_score = 100 * (
+        0.60 * pair_collusion_score.div(100.0)
+        + 0.25 * concentration_score
+        + 0.15 * volume_score
+    )
+    ghost_trip_rule_score = 100 * (
+        0.65 * suspected_ghost_score.div(100.0)
+        + 0.20 * temporal_score
+        + 0.15 * ghost_rate
+    )
+    route_farming_rule_score = 100 * (
+        0.55 * _numeric_series(enriched, "dominant_route_share").clip(0, 1)
+        + 0.20 * temporal_score
+        + 0.15 * pair_collusion_score.div(100.0)
+        + 0.10 * ghost_rate
+    )
+    route_trip_support = np.clip(_numeric_series(enriched, "n_trips") / 6.0, 0, 1)
+    route_farming_rule_score = route_farming_rule_score * route_trip_support
+    network_risk = _numeric_series(enriched, "network_risk_score")
+    supporting_signal_count = _numeric_series(enriched, "supporting_signal_count")
+    linked_pair_count = _numeric_series(enriched, "linked_pair_count")
+    component_density = _numeric_series(enriched, "component_density")
+    network_pattern_rule_score = 100 * (
+        0.55 * network_risk.div(100.0)
+        + 0.20 * np.clip(supporting_signal_count / 4.0, 0, 1)
+        + 0.15 * np.clip(linked_pair_count / 6.0, 0, 1)
+        + 0.10 * component_density.clip(0, 1)
+    )
+
+    score_columns = {
+        BUSINESS_RULE_REPEATED_PAIR: repeated_pair_rule_score.round(2),
+        BUSINESS_RULE_GHOST_TRIP: ghost_trip_rule_score.round(2),
+        BUSINESS_RULE_ROUTE_FARMING: route_farming_rule_score.round(2),
+        BUSINESS_RULE_NETWORK: network_pattern_rule_score.round(2),
+    }
+    score_frame = pd.DataFrame(score_columns, index=enriched.index)
+    business_rule = score_frame.idxmax(axis=1)
+    business_rule_score = score_frame.max(axis=1).round(2)
+    return enriched.assign(
+        repeated_pair_rule_score=score_columns[BUSINESS_RULE_REPEATED_PAIR],
+        ghost_trip_rule_score=score_columns[BUSINESS_RULE_GHOST_TRIP],
+        route_farming_rule_score=score_columns[BUSINESS_RULE_ROUTE_FARMING],
+        network_pattern_rule_score=score_columns[BUSINESS_RULE_NETWORK],
+        business_rule=business_rule,
+        business_rule_label=business_rule.map(BUSINESS_RULE_LABELS),
+        business_rule_story=business_rule.map(BUSINESS_RULE_STORIES),
+        business_rule_score=business_rule_score,
     )
 
 
@@ -591,6 +674,63 @@ def enrich_pair_graph_features(
     return enriched.drop(columns=["pair_key"])
 
 
+def finalize_business_rule_assignment(pair_stats: pd.DataFrame, pair_reason_rows: pd.DataFrame) -> pd.DataFrame:
+    if pair_stats.empty:
+        return pair_stats.copy()
+
+    enriched = pair_stats.copy()
+    if pair_reason_rows.empty or "business_rule" not in pair_reason_rows.columns:
+        return enriched
+
+    score_column_by_rule = {
+        BUSINESS_RULE_REPEATED_PAIR: "repeated_pair_rule_score",
+        BUSINESS_RULE_GHOST_TRIP: "ghost_trip_rule_score",
+        BUSINESS_RULE_ROUTE_FARMING: "route_farming_rule_score",
+        BUSINESS_RULE_NETWORK: "network_pattern_rule_score",
+    }
+
+    decisions: list[dict[str, object]] = []
+    for (driver_id, customer_id), group in pair_reason_rows.groupby(["driver_id", "customer_id"], dropna=False):
+        rules = [rule for rule in group["business_rule"].dropna().astype(str).unique().tolist() if rule]
+        reasons = group["reason_code"].dropna().astype(str).unique().tolist()
+        pair_row = enriched[(enriched["driver_id"] == driver_id) & (enriched["customer_id"] == customer_id)]
+        if pair_row.empty:
+            continue
+        pair_row = pair_row.iloc[0]
+        if rules:
+            best_rule = max(rules, key=lambda rule: float(pair_row.get(score_column_by_rule.get(rule, ""), 0.0) or 0.0))
+        else:
+            best_rule = str(pair_row.get("business_rule", "")) or BUSINESS_RULE_REPEATED_PAIR
+        decisions.append(
+            {
+                "driver_id": driver_id,
+                "customer_id": customer_id,
+                "triggered_business_rules": " | ".join(BUSINESS_RULE_LABELS.get(rule, rule) for rule in rules),
+                "triggered_reason_codes": " | ".join(reasons),
+                "primary_business_rule": best_rule,
+                "primary_business_rule_label": BUSINESS_RULE_LABELS.get(best_rule, best_rule),
+                "primary_business_rule_story": BUSINESS_RULE_STORIES.get(best_rule, ""),
+                "primary_business_rule_score": round(float(pair_row.get(score_column_by_rule.get(best_rule, ""), 0.0) or 0.0), 2),
+            }
+        )
+
+    if not decisions:
+        return enriched
+
+    decision_frame = pd.DataFrame(decisions)
+    enriched = enriched.drop(columns=[column for column in decision_frame.columns if column in enriched.columns and column not in {"driver_id", "customer_id"}])
+    enriched = enriched.merge(decision_frame, on=["driver_id", "customer_id"], how="left")
+    for source, target in (
+        ("primary_business_rule", "business_rule"),
+        ("primary_business_rule_label", "business_rule_label"),
+        ("primary_business_rule_story", "business_rule_story"),
+        ("primary_business_rule_score", "business_rule_score"),
+    ):
+        if source in enriched.columns:
+            enriched[target] = enriched[source].fillna(enriched.get(target))
+    return enriched
+
+
 def build_flagged_orders(active_orders: pd.DataFrame, pair_reason_rows: pd.DataFrame) -> pd.DataFrame:
     if pair_reason_rows.empty:
         return pd.DataFrame()
@@ -600,6 +740,12 @@ def build_flagged_orders(active_orders: pd.DataFrame, pair_reason_rows: pd.DataF
         "customer_id",
         "rule_name",
         "reason_code",
+        "business_rule",
+        "business_rule_label",
+        "business_rule_story",
+        "business_rule_score",
+        "triggered_business_rules",
+        "triggered_reason_codes",
         "flag_reason",
         "supporting_signal",
         "n_trips",
@@ -625,6 +771,10 @@ def build_flagged_orders(active_orders: pd.DataFrame, pair_reason_rows: pd.DataF
         "low_value_farming_score",
         "suspected_ghost_score",
         "pair_risk_score",
+        "repeated_pair_rule_score",
+        "ghost_trip_rule_score",
+        "route_farming_rule_score",
+        "network_pattern_rule_score",
         "network_support_score",
         "network_risk_score",
         "business_impact_score",
@@ -672,6 +822,16 @@ def build_flagged_orders(active_orders: pd.DataFrame, pair_reason_rows: pd.DataF
         "low_value_farming_score": 0.0,
         "suspected_ghost_score": 0.0,
         "pair_risk_score": 0.0,
+        "business_rule": pd.NA,
+        "business_rule_label": pd.NA,
+        "business_rule_story": pd.NA,
+        "business_rule_score": 0.0,
+        "triggered_business_rules": pd.NA,
+        "triggered_reason_codes": pd.NA,
+        "repeated_pair_rule_score": 0.0,
+        "ghost_trip_rule_score": 0.0,
+        "route_farming_rule_score": 0.0,
+        "network_pattern_rule_score": 0.0,
         "network_support_score": 0.0,
         "network_risk_score": 0.0,
         "business_impact_score": 0.0,
@@ -749,6 +909,11 @@ def build_flagged_orders(active_orders: pd.DataFrame, pair_reason_rows: pd.DataF
                 "low_value_farming_score": round(_safe_float(row["low_value_farming_score"]), 4),
                 "suspected_ghost_score": round(_safe_float(row["suspected_ghost_score"]), 2),
                 "pair_risk_score": round(_safe_float(row["pair_risk_score"]), 2),
+                "business_rule": row["business_rule"],
+                "business_rule_label": row["business_rule_label"],
+                "business_rule_score": round(_safe_float(row["business_rule_score"]), 2),
+                "triggered_business_rules": row["triggered_business_rules"],
+                "triggered_reason_codes": row["triggered_reason_codes"],
                 "network_support_score": round(_safe_float(row["network_support_score"]), 2),
                 "network_risk_score": round(_safe_float(row["network_risk_score"]), 2),
                 "business_impact_score": round(_safe_float(row["business_impact_score"]), 2),

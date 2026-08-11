@@ -1,8 +1,0 @@
-metric,value
-raw_orders,4.0
-active_orders,4.0
-candidate_pairs,1.0
-trip_threshold_q9999,2.9998
-flagged_pairs,1.0
-flagged_rows,9.0
-high_confidence_pairs,1.0

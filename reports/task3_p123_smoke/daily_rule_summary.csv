@@ -1,3 +1,0 @@
-domain,order_date,rule_name,flagged_orders,flagged_customers,model_overlap_orders,total_gmv,total_discount
-ride,2026-07-24,REPEATED_CUSTOMER_DRIVER,2,1,0,24500.0,9000.0
-ride,2026-07-25,REPEATED_CUSTOMER_DRIVER,1,1,0,13000.0,0.0

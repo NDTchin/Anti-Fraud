@@ -1,2 +1,0 @@
-case_id,case_source,driver_id,customer_id,expected_reason,reason_code,high_confidence,n_trips,ghost_rate,min_gap_min,pair_core_score,priority_score,is_flagged
-kbc_example_64_trips,user_scope_example,652280701c4d0c32,0cb58995c54abba0,KB-C_SUPERFAST_GAP,,,,,,,,False

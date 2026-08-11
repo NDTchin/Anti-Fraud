@@ -1,6 +1,0 @@
-signal_type,distinct_entities,eligible_entities,filtered_entities,avg_pair_degree,max_pair_degree,avg_rarity_weight,retained_edge_count
-dropoff,8484,1378,7106,1.4976,422,0.7684,600
-payment,11,9,2,22.4545,60,0.4645,5
-pickup,8391,1178,7213,1.4119,56,0.7721,597
-promo,2295,296,1999,1.9564,123,0.8101,115
-route,15477,477,15000,1.045,8,0.6967,306

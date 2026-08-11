@@ -4,6 +4,7 @@ import pandas as pd
 
 from src.algorithms.ride_collusion_graph import (
     RideCollusionGraphConfig,
+    SuspiciousPairConfig,
     build_pair_stats,
     enrich_suspicious_pair_details,
     prepare_active_orders,
@@ -11,10 +12,13 @@ from src.algorithms.ride_collusion_graph import (
 )
 from src.rules.ride_kbc_rules import KbcRuleConfig, annotate_kbc_signals, apply_kbc_rules
 from src.scoring.ride_collusion_scoring import (
+    build_pair_scoring_features,
     build_graph_quality_reports,
     build_flagged_orders,
     enrich_pair_graph_features,
+    finalize_business_rule_assignment,
     score_pairs,
+    score_business_rules,
     summarize_daily_flags,
 )
 
@@ -118,13 +122,33 @@ def test_build_pair_stats_and_reasons_for_kbc_case() -> None:
 
     active = prepare_active_orders(raw)
     graph_config = RideCollusionGraphConfig(extreme_trip_quantile=0.5)
-    rule_config = KbcRuleConfig(high_ghost_rate=0.3, superfast_gap_min=5.0, min_pair_trips_for_share_rule=3)
+    rule_config = KbcRuleConfig(
+        high_ghost_rate=0.3,
+        superfast_gap_min=5.0,
+        min_pair_trips_for_share_rule=3,
+        dominant_route_share=0.5,
+        min_high_confidence_trips=3,
+        min_superfast_trips=3,
+    )
     pair_stats, _, _ = build_pair_stats(active, graph_config)
     pair_stats = score_pairs(pair_stats)
-    pair_stats = shortlist_suspicious_pairs(pair_stats)
+    pair_stats = shortlist_suspicious_pairs(
+        pair_stats,
+        SuspiciousPairConfig(
+            min_pair_trips=3,
+            min_concentration_score=0.5,
+            min_pair_core_score=35.0,
+            min_ghost_rate=0.3,
+            min_repeat_share_driver=0.3,
+            min_repeat_share_customer=0.3,
+        ),
+    )
     pair_stats = enrich_suspicious_pair_details(active, pair_stats)
     pair_stats = annotate_kbc_signals(pair_stats, rule_config)
+    pair_stats = build_pair_scoring_features(pair_stats)
+    pair_stats = score_business_rules(pair_stats)
     reason_rows = apply_kbc_rules(pair_stats, rule_config)
+    pair_stats = finalize_business_rule_assignment(pair_stats, reason_rows)
     flagged_orders = build_flagged_orders(active, reason_rows)
     daily = summarize_daily_flags(flagged_orders)
 
@@ -136,9 +160,58 @@ def test_build_pair_stats_and_reasons_for_kbc_case() -> None:
     assert round(float(pair_stats.iloc[0]["min_gap_min"]), 1) == 0.9
     assert bool(pair_stats.iloc[0]["high_confidence"]) is True
     assert round(float(pair_stats.iloc[0]["pair_core_score"]), 2) > 40
+    assert pair_stats.iloc[0]["business_rule_label"] == "Mau thuc thi ghost trip"
     assert {"KB-C_EXTREME_VOLUME", "KB-C_HIGH_GHOST_RATE", "KB-C_SUPERFAST_GAP", "KB-C_TIGHT_PAIR_SHARE", "KB-C_ROUTE_LOOP"} <= set(reason_rows["reason_code"])
+    assert {"Cap lap lai va phu thuoc bat thuong", "Mau thuc thi ghost trip", "Mau farming theo tuyen"} <= set(reason_rows["business_rule_label"])
     assert flagged_orders["order_id"].nunique() == 3
     assert int(daily["flagged_orders"].sum()) == 3
+
+
+def test_enrich_suspicious_pair_details_sorts_before_gap_diff() -> None:
+    active = pd.DataFrame(
+        [
+            {
+                "order_id": "o2",
+                "driver_id": "d1",
+                "customer_id": "c1",
+                "order_time_local_tz": pd.Timestamp("2026-07-14T10:00:54"),
+                "pickup_address": "A",
+                "last_dropoff_address": "B",
+                "route_key": "A -> B",
+            },
+            {
+                "order_id": "o1",
+                "driver_id": "d1",
+                "customer_id": "c1",
+                "order_time_local_tz": pd.Timestamp("2026-07-14T10:00:00"),
+                "pickup_address": "A",
+                "last_dropoff_address": "B",
+                "route_key": "A -> B",
+            },
+            {
+                "order_id": "o3",
+                "driver_id": "d1",
+                "customer_id": "c1",
+                "order_time_local_tz": pd.Timestamp("2026-07-14T10:02:00"),
+                "pickup_address": "A",
+                "last_dropoff_address": "B",
+                "route_key": "A -> B",
+            },
+        ]
+    )
+    suspicious_pairs = pd.DataFrame(
+        [
+            {
+                "driver_id": "d1",
+                "customer_id": "c1",
+                "n_trips": 3,
+            }
+        ]
+    )
+
+    enriched = enrich_suspicious_pair_details(active, suspicious_pairs)
+
+    assert round(float(enriched.iloc[0]["min_gap_min"]), 1) == 0.9
 
 
 def test_prepare_active_orders_keeps_only_completed_status() -> None:

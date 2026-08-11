@@ -10,10 +10,6 @@ Nguon dinh huong goc:
 
 - `docs/graph_algorithms_for_driver_customer_ghost_trip_collusion.md`
 
-Tai lieu nay khong co muc tieu mo ta "code dang chay hien tai" theo nghia implementation lich su. Thay vao do, no chot bo thuat toan can duoc uu tien khi lam lai project.
-
-Ngay cap nhat: `2026-08-05`
-
 ## Ket luan nhanh
 
 Project nen tap trung vao 3 graph algorithms cot loi:

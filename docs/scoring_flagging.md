@@ -1,4 +1,4 @@
-# Scoring Va Flagging Theo Huong Moi Cua Project
+# Scoring Va Flagging 
 
 ## Pham vi tai lieu
 
@@ -11,10 +11,6 @@ Muc tieu la tach ro:
 - `graph core`
 - `optional enrichment`
 - `flagging output`
-
-Tai lieu nay khong dong nhat voi implementation lich su. No la dinh huong scoring/flagging can phu hop voi kien truc moi.
-
-Ngay cap nhat: `2026-08-05`
 
 ## Ket luan nhanh
 
@@ -31,6 +27,26 @@ Trong do:
 - `investigation priority` la diem cuoi de xep thu tu review
 
 Flagging van nen materialize xuong cap `order`, nhung logic phat hien va cham diem phai duoc xac lap o cap `driver-customer pair`.
+
+## Cap nhat implementation 2026-08-11
+
+Pipeline hien tai da duoc siet lai theo huong giam false positive va giam noise:
+
+- da sua bug tinh `min_gap_min` de luon `sort` dung truoc khi tinh `diff()`
+- khong con chap nhan `min_gap_min` am lam bang chung `SUPERFAST_GAP`
+- suspicious pair shortlist mac dinh da chat hon
+- network support tiep tuc la bang chung ho tro, khong duoc thay the pair evidence
+
+Tac dong da do tren ngay `2026-07-24`:
+
+- truoc update: `3,019` `unique orders` bi flag
+- sau update: `482` `unique orders` bi flag
+- giam `2,537` orders, tuong duong khoang `84.0%`
+
+Luu y quan trong:
+
+- `8,427` la `flag rows`, khong phai `unique orders`
+- mot order co the trung nhieu `reason_code`, vi vay can tach ro `flag rows` va `flagged_orders`
 
 ## 1. Don vi scoring chinh
 
@@ -65,9 +81,19 @@ Tai lieu huong moi khuyen nghi uu tien 2 diem nay truoc moi signal khac.
 
 Mot pair nen duoc dua vao suspicious list neu:
 
-- `volume_score` cao
-- hoac `concentration_score` cao
-- hoac ca hai
+- du `min_pair_trips`
+- va co bang chung repeated-pair manh hoac ghost signal manh
+
+Mac dinh implementation hien tai uu tien:
+
+- `n_trips >= 4`
+- va mot trong hai nhom sau:
+  - repeated-pair manh:
+    - `is_extreme_volume = True`
+    - va `pair_share_driver >= 0.4` hoac `pair_share_customer >= 0.6`
+    - va `concentration_score >= 0.85` hoac `pair_core_score >= 50`
+  - ghost signal manh:
+    - `ghost_rate >= 0.5`
 
 Neu can mot ban MVP de trien khai nhanh, co the dung rule don gian:
 
@@ -131,6 +157,11 @@ Nen dung chung de:
 
 Khong nen de chung tro thanh trung tam kien truc scoring.
 
+Operational note:
+
+- `ghost_rate` van la enrichment quan trong, nhung o implementation hien tai no cung co the dua pair vao shortlist khi du manh
+- dieu nay duoc chap nhan vi bai toan dang la `ghost-trip collusion`, nhung pair evidence van phai duoc uu tien trong explainability
+
 ## 5. Risk tier va flagging
 
 `risk_tier` nen phan anh muc do uu tien review, khong phai ket luan fraud.
@@ -141,6 +172,18 @@ Goi y phan lop:
 - `MEDIUM`: pair core score ro rang nhung network support vua phai
 - `WATCHLIST`: pair duoc shortlist nhung can them bang chung
 
+Trong implementation hien tai, `risk_tier` order-level dang duoc materialize thanh:
+
+- `IMMEDIATE_REVIEW`
+- `HIGH_RISK`
+- `MONITOR`
+- `LOW_PRIORITY`
+
+Trong do:
+
+- `high_confidence` khong con duoc bat chi vi mot `gap` nho don le
+- `SUPERFAST_GAP` chi hop le khi gap khong am, du so trip, va co ghost support toi thieu
+
 Co the giu dau ra cap order vi analyst thuong review tren order timeline, nhung can hieu:
 
 - phat hien o cap pair
@@ -149,19 +192,25 @@ Co the giu dau ra cap order vi analyst thuong review tren order timeline, nhung 
 
 ## 6. Output nen duoc duy tri
 
-Mot pipeline scoring/flagging theo huong moi nen xuat toi thieu:
+Ve mat concept, mot pipeline scoring/flagging theo huong moi nen co toi thieu:
 
 - `pair_summary`
 - `pair_reasons`
-- `suspicious_components`
 - `flagged_orders`
 
 Trong do:
 
 - `pair_summary` la bang trung tam de cham diem va rank
 - `pair_reasons` giai thich tai sao pair bi shortlist
-- `suspicious_components` phuc vu mo case cluster
 - `flagged_orders` phuc vu review van hanh
+
+Trong implementation dashboard hien tai, chi 3 file core duoc materialize va doc truc tiep:
+
+- `flagged_orders.parquet`
+- `kbc_pair_summary.csv`
+- `kbc_pair_reasons.csv`
+
+Thong tin `component` van duoc giu trong cac file core va duoc dashboard suy ra tu do, nen khong can materialize them mot file report rieng chi de phuc vu dashboard.
 
 ## 7. Cach doc score cho dung
 
