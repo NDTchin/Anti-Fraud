@@ -12,17 +12,17 @@ BUSINESS_RULE_ROUTE_FARMING = "ROUTE_FARMING_PATTERN"
 BUSINESS_RULE_NETWORK = "COORDINATED_NETWORK_PATTERN"
 
 BUSINESS_RULE_LABELS = {
-    BUSINESS_RULE_REPEATED_PAIR: "Cap lap lai va phu thuoc bat thuong",
-    BUSINESS_RULE_GHOST_TRIP: "Mau thuc thi ghost trip",
-    BUSINESS_RULE_ROUTE_FARMING: "Mau farming theo tuyen",
-    BUSINESS_RULE_NETWORK: "Mau lien ket theo mang",
+    BUSINESS_RULE_REPEATED_PAIR: "Cặp lặp lại và phụ thuộc bất thường",
+    BUSINESS_RULE_GHOST_TRIP: "Dấu hiệu đơn ảo hoặc quay đầu bất thường",
+    BUSINESS_RULE_ROUTE_FARMING: "Mẫu farming theo tuyến",
+    BUSINESS_RULE_NETWORK: "Cụm liên kết đáng ngờ nhiều cặp",
 }
 
 BUSINESS_RULE_STORIES = {
-    BUSINESS_RULE_REPEATED_PAIR: "Tai xe va khach hang di voi nhau nhieu lan va co muc do phu thuoc bat thuong so voi hanh vi thong thuong.",
-    BUSINESS_RULE_GHOST_TRIP: "Cap nay co dau hieu thuc thi ghost trip, voi nhieu chuyen nghi ngo gia lap hoac quay dau phi thuc te.",
-    BUSINESS_RULE_ROUTE_FARMING: "Cap nay lap lai cung mot kieu tuyen duong voi mat do dang nghi, giong hanh vi farming hon la di chuyen tu nhien.",
-    BUSINESS_RULE_NETWORK: "Cap nay khong dung mot minh ma nam trong mot nhom lien ket voi cac cap dang nghi khac.",
+    BUSINESS_RULE_REPEATED_PAIR: "Tài xế và khách hàng đi với nhau nhiều lần và có mức độ phụ thuộc bất thường so với hành vi thông thường.",
+    BUSINESS_RULE_GHOST_TRIP: "Cặp này có nhiều chuyến mang dấu hiệu đơn ảo, không di chuyển thật hoặc tạo chuyến quá sát nhau về thời gian.",
+    BUSINESS_RULE_ROUTE_FARMING: "Cặp này lặp lại cùng một kiểu tuyến đường với mật độ đáng ngờ, giống hành vi farming hơn là di chuyển tự nhiên.",
+    BUSINESS_RULE_NETWORK: "Cặp này nằm trong một cụm có nhiều cặp đáng ngờ khác cùng chia sẻ tín hiệu như địa điểm, tuyến, khuyến mãi hoặc phương thức thanh toán.",
 }
 
 REASON_CODE_TO_BUSINESS_RULE = {
@@ -51,27 +51,27 @@ class KbcRuleConfig:
 
     def validate(self) -> None:
         if not 0 <= self.high_ghost_rate <= 1:
-            raise ValueError("high_ghost_rate must be between 0 and 1.")
+            raise ValueError("high_ghost_rate phải nằm trong khoảng 0 đến 1.")
         if self.superfast_gap_min <= 0:
-            raise ValueError("superfast_gap_min must be positive.")
+            raise ValueError("superfast_gap_min phải là số dương.")
         if not 0 <= self.tight_pair_share_driver <= 1:
-            raise ValueError("tight_pair_share_driver must be between 0 and 1.")
+            raise ValueError("tight_pair_share_driver phải nằm trong khoảng 0 đến 1.")
         if not 0 <= self.tight_pair_share_customer <= 1:
-            raise ValueError("tight_pair_share_customer must be between 0 and 1.")
+            raise ValueError("tight_pair_share_customer phải nằm trong khoảng 0 đến 1.")
         if not 0 <= self.dominant_route_share <= 1:
-            raise ValueError("dominant_route_share must be between 0 and 1.")
+            raise ValueError("dominant_route_share phải nằm trong khoảng 0 đến 1.")
         if self.min_pair_trips_for_share_rule < 2:
-            raise ValueError("min_pair_trips_for_share_rule must be at least 2.")
+            raise ValueError("min_pair_trips_for_share_rule phải >= 2.")
         if self.min_component_size < 1:
-            raise ValueError("min_component_size must be at least 1.")
+            raise ValueError("min_component_size phải >= 1.")
         if self.min_high_confidence_trips < 1:
-            raise ValueError("min_high_confidence_trips must be at least 1.")
+            raise ValueError("min_high_confidence_trips phải >= 1.")
         if self.min_superfast_trips < 2:
-            raise ValueError("min_superfast_trips must be at least 2.")
+            raise ValueError("min_superfast_trips phải >= 2.")
         if self.min_network_linked_pairs < 1:
-            raise ValueError("min_network_linked_pairs must be at least 1.")
+            raise ValueError("min_network_linked_pairs phải >= 1.")
         if self.min_network_supporting_signals < 1:
-            raise ValueError("min_network_supporting_signals must be at least 1.")
+            raise ValueError("min_network_supporting_signals phải >= 1.")
 
 
 def annotate_kbc_signals(pair_stats: pd.DataFrame, config: KbcRuleConfig) -> pd.DataFrame:
@@ -140,7 +140,7 @@ def apply_kbc_rules(pair_stats: pd.DataFrame, config: KbcRuleConfig) -> pd.DataF
             | (enriched["pair_share_customer"] >= config.tight_pair_share_customer)
         ),
         "KB-C_EXTREME_VOLUME",
-        "Driver-customer pair is an extreme weighted edge in the current analysis window.",
+        "Cặp tài xế - khách hàng này lặp lại với tần suất rất cao trong cửa sổ phân tích hiện tại.",
         "weighted_edge_outlier",
     )
     append_reason(
@@ -148,7 +148,7 @@ def apply_kbc_rules(pair_stats: pd.DataFrame, config: KbcRuleConfig) -> pd.DataF
         & (enriched["pair_share_driver"] >= config.tight_pair_share_driver)
         & (enriched["pair_share_customer"] >= config.tight_pair_share_customer),
         "KB-C_TIGHT_PAIR_SHARE",
-        "The pair absorbs an unusually large share of both the driver and customer activity.",
+        "Cặp tài xế - khách hàng này chiếm tỷ trọng bất thường trong tổng hoạt động của cả tài xế và khách hàng.",
         "bipartite_pair_concentration",
     )
     if "component_size" in enriched.columns:
@@ -160,14 +160,14 @@ def apply_kbc_rules(pair_stats: pd.DataFrame, config: KbcRuleConfig) -> pd.DataF
                 >= config.min_network_supporting_signals
             ),
             "KB-C_SUSPICIOUS_COMPONENT",
-            "The suspicious pair belongs to a connected component with shared supporting entities.",
+            "Cặp tài xế - khách hàng này nằm trong một nhóm liên kết đáng nghi và chia sẻ đầu mối với nhiều cặp khác.",
             "wcc_component_support",
         )
     if "ghost_rate" in enriched.columns:
         append_reason(
             (ghost_rate >= config.high_ghost_rate) & (n_trips >= config.min_high_confidence_trips),
             "KB-C_HIGH_GHOST_RATE",
-            "Driver-customer pair has a high share of ghost trips with avg_kmh = 0.",
+            "Tỷ lệ ghost trip của cặp tài xế - khách hàng này cao, với nhiều chuyến có avg_kmh = 0.",
             "ghost_trip_density",
         )
     if "min_gap_min" in enriched.columns:
@@ -176,7 +176,7 @@ def apply_kbc_rules(pair_stats: pd.DataFrame, config: KbcRuleConfig) -> pd.DataF
             & (ghost_rate >= 0.2)
             & (n_trips >= config.min_superfast_trips),
             "KB-C_SUPERFAST_GAP",
-            "Driver-customer pair creates consecutive trips too quickly to look operationally normal.",
+            "Cặp tài xế - khách hàng này tạo các chuyến liên tiếp quá nhanh, không giống vận hành bình thường.",
             "temporal_turnaround",
         )
     if "dominant_route_share" in enriched.columns:
@@ -184,7 +184,7 @@ def apply_kbc_rules(pair_stats: pd.DataFrame, config: KbcRuleConfig) -> pd.DataF
             (enriched["n_trips"] >= config.min_pair_trips_for_share_rule)
             & (enriched["dominant_route_share"] >= config.dominant_route_share),
             "KB-C_ROUTE_LOOP",
-            "The pair repeatedly cycles through the same pickup-dropoff route at suspicious density.",
+            "Cặp này lặp lại cùng một kiểu tuyến đường với mật độ đáng ngờ, giống hành vi farming hơn là di chuyển tự nhiên.",
             "route_loop_reuse",
         )
 

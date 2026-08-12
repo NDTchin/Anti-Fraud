@@ -160,9 +160,9 @@ def test_build_pair_stats_and_reasons_for_kbc_case() -> None:
     assert round(float(pair_stats.iloc[0]["min_gap_min"]), 1) == 0.9
     assert bool(pair_stats.iloc[0]["high_confidence"]) is True
     assert round(float(pair_stats.iloc[0]["pair_core_score"]), 2) > 40
-    assert pair_stats.iloc[0]["business_rule_label"] == "Mau thuc thi ghost trip"
+    assert pair_stats.iloc[0]["business_rule_label"] == "Dấu hiệu đơn ảo hoặc quay đầu bất thường"
     assert {"KB-C_EXTREME_VOLUME", "KB-C_HIGH_GHOST_RATE", "KB-C_SUPERFAST_GAP", "KB-C_TIGHT_PAIR_SHARE", "KB-C_ROUTE_LOOP"} <= set(reason_rows["reason_code"])
-    assert {"Cap lap lai va phu thuoc bat thuong", "Mau thuc thi ghost trip", "Mau farming theo tuyen"} <= set(reason_rows["business_rule_label"])
+    assert {"Cặp lặp lại và phụ thuộc bất thường", "Dấu hiệu đơn ảo hoặc quay đầu bất thường", "Mẫu farming theo tuyến"} <= set(reason_rows["business_rule_label"])
     assert flagged_orders["order_id"].nunique() == 3
     assert int(daily["flagged_orders"].sum()) == 3
 

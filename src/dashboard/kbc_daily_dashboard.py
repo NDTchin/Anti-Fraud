@@ -11,6 +11,8 @@ import streamlit as st
 
 REPORT_DIR = Path("reports/task3")
 ALL_OPTION = "__all__"
+EXECUTIVE_CARD_HEIGHT = 360
+EXECUTIVE_CHART_MARGIN = dict(l=24, r=16, t=56, b=48)
 
 GRANULARITY_CONFIG = {
     "Ngày": "order_day",
@@ -508,17 +510,38 @@ def _render_insight_cards(insights: dict[str, dict[str, str]]) -> None:
                 st.caption(data["detail"])
 
 
-def _render_executive_story(insights: dict[str, dict[str, str]]) -> None:
-    st.markdown("### Người xem tổng quan cần nhìn gì hôm nay?")
-    st.markdown(
-        f"- Theo dõi biến động mới nhất: {insights['trend']['value']} - {insights['trend']['detail']}\n"
-        f"- Xem dịch vụ bị ảnh hưởng nhiều nhất: {insights['service']['value']}.\n"
-        f"- Hiểu rule nổi bật nhất đang kể câu chuyện gì: {insights['rule']['value']}.\n"
-        f"- Ưu tiên nhóm WCC nào cần điều tra trước: {insights['component']['value']}."
+def _render_rule_story_overview(rules: pd.DataFrame) -> None:
+    st.markdown("### Câu chuyện của các rules")
+    st.caption(
+        "Khối này tổng hợp nhanh câu chuyện chung của các rule, "
+        "để người xem hiểu bức tranh tổng quan trước khi xuống các bảng chi tiết."
     )
+    if rules.empty:
+        st.info("Không có dữ liệu rule fraud.")
+        return
+
+    for _, row in rules.head(4).iterrows():
+        with st.container(border=True):
+            left, mid, right = st.columns([1.8, 1, 1])
+            with left:
+                st.markdown(f"**{row['business_rule_label']}**")
+                story = row.get("business_rule_story", "")
+                if isinstance(story, str) and story.strip():
+                    st.write(story)
+            with mid:
+                st.metric("Đơn bị flag", f"{int(row['flagged_orders']):,}")
+            with right:
+                avg_priority = float(row["avg_priority_score"]) if pd.notna(row["avg_priority_score"]) else 0.0
+                st.metric("Điểm ưu tiên TB", f"{avg_priority:.2f}")
 
 
-def _render_main_trend(summary: pd.DataFrame, granularity_label: str, metric_label: str, chart_key: str) -> None:
+def _render_main_trend(
+    summary: pd.DataFrame,
+    granularity_label: str,
+    metric_label: str,
+    chart_key: str,
+    chart_height: int | None = None,
+) -> None:
     metric_col = METRIC_OPTIONS[metric_label]
     chart = px.line(
         summary,
@@ -529,12 +552,15 @@ def _render_main_trend(summary: pd.DataFrame, granularity_label: str, metric_lab
         title=f"{metric_label} theo {granularity_label.lower()}",
     )
     chart.update_traces(line=dict(width=4), marker=dict(size=8))
-    chart.update_layout(
-        xaxis_title=None,
-        yaxis_title=metric_label,
-        hovermode="x unified",
-        plot_bgcolor="rgba(0,0,0,0)",
-    )
+    layout_options = {
+        "xaxis_title": None,
+        "yaxis_title": metric_label,
+        "hovermode": "x unified",
+        "plot_bgcolor": "rgba(0,0,0,0)",
+    }
+    if chart_height:
+        layout_options.update(height=chart_height, margin=EXECUTIVE_CHART_MARGIN)
+    chart.update_layout(**layout_options)
     st.plotly_chart(chart, width="stretch", key=chart_key)
 
 
@@ -587,8 +613,8 @@ def _render_executive_tab(
             width="stretch",
             hide_index=True,
         )
-    with right:
-        st.markdown("#### Rule fraud nổi bật và câu chuyện")
+    if False:
+        pass
         if rules.empty:
             st.info("Không có dữ liệu rule fraud.")
         else:
@@ -625,6 +651,191 @@ def _render_executive_tab(
         )
         component_chart.update_layout(xaxis_title=None, yaxis_title=None)
         st.plotly_chart(component_chart, width="stretch", key="executive_component_chart")
+
+
+def _render_executive_tab_v2(
+    flags: pd.DataFrame,
+    summary: pd.DataFrame,
+    rules: pd.DataFrame,
+    components: pd.DataFrame,
+    granularity_label: str,
+) -> None:
+    st.subheader("Bức tranh điều hành")
+    st.caption("Tab này dành cho người xem tổng quan: cần nhìn ngay xu hướng, dịch vụ chịu ảnh hưởng và rule nổi bật.")
+
+    left, right = st.columns([1.4, 1])
+    with left:
+        _render_main_trend(summary, granularity_label, "Đơn bị flag", "executive_main_trend_v2")
+    with right:
+        service_summary = (
+            flags.groupby("service_name", dropna=False)
+            .agg(flagged_orders=("order_id", "nunique"))
+            .reset_index()
+            .fillna({"service_name": "Không rõ"})
+            .sort_values("flagged_orders", ascending=False)
+            .head(10)
+        )
+        service_chart = px.bar(
+            service_summary.sort_values("flagged_orders", ascending=True),
+            x="flagged_orders",
+            y="service_name",
+            orientation="h",
+            title="Top dịch vụ theo số đơn bị flag",
+        )
+        service_chart.update_layout(xaxis_title=None, yaxis_title=None)
+        st.plotly_chart(service_chart, width="stretch", key="executive_service_chart_v2")
+
+    left, right = st.columns([1, 1.2])
+    with left:
+        st.markdown("#### Tổng hợp theo kỳ")
+        st.dataframe(
+            summary.rename(
+                columns={
+                    "period_start": "Kỳ bắt đầu",
+                    "total_orders_in_scope": "Tổng đơn trong tập flagged",
+                    "flagged_orders": "Đơn bị flag",
+                    "flagged_drivers": "Tài xế bị flag",
+                    "flagged_customers": "Khách hàng bị flag",
+                    "flagged_pairs": "Cặp tài xế - khách hàng",
+                }
+            ),
+            width="stretch",
+            hide_index=True,
+        )
+    if False:
+        pass
+        if rules.empty:
+            st.info("Không có dữ liệu rule fraud.")
+        else:
+            top_rule_chart = px.bar(
+                rules.head(8).sort_values("flagged_orders", ascending=True),
+                x="flagged_orders",
+                y="business_rule_label",
+                orientation="h",
+                title="Top rule theo số đơn bị flag",
+            )
+            top_rule_chart.update_layout(xaxis_title=None, yaxis_title=None)
+            st.plotly_chart(top_rule_chart, width="stretch", key="executive_top_rule_chart_v2")
+
+    if not components.empty:
+        st.markdown("#### Nhóm WCC nào cần ưu tiên?")
+        component_chart = px.bar(
+            components.head(10).sort_values("max_priority_score", ascending=True),
+            x="max_priority_score",
+            y="component_id",
+            orientation="h",
+            title="Top nhóm WCC theo điểm ưu tiên",
+            hover_data=["component_size", "flagged_orders", "top_service", "top_rule"],
+        )
+        component_chart.update_layout(xaxis_title=None, yaxis_title=None)
+        st.plotly_chart(component_chart, width="stretch", key="executive_component_chart_v2")
+
+
+def _render_rule_story_overview_clean(rules: pd.DataFrame) -> None:
+    st.markdown("### Câu chuyện của các rules")
+    st.caption(
+        "Khối này tổng hợp nhanh câu chuyện chung của các rule, để người xem hiểu bức tranh tổng quan trước khi xuống các bảng chi tiết."
+    )
+    if rules.empty:
+        st.info("Không có dữ liệu rule fraud.")
+        return
+
+    for _, row in rules.head(4).iterrows():
+        with st.container(border=True):
+            left, mid, right = st.columns([1.8, 1, 1])
+            with left:
+                st.markdown(f"**{row['business_rule_label']}**")
+                story = row.get("business_rule_story", "")
+                if isinstance(story, str) and story.strip():
+                    st.write(story)
+            with mid:
+                st.metric("Đơn bị flag", f"{int(row['flagged_orders']):,}")
+            with right:
+                avg_priority = float(row["avg_priority_score"]) if pd.notna(row["avg_priority_score"]) else 0.0
+                st.metric("Điểm ưu tiên TB", f"{avg_priority:.2f}")
+
+
+def _render_executive_tab_clean(
+    flags: pd.DataFrame,
+    summary: pd.DataFrame,
+    rules: pd.DataFrame,
+    components: pd.DataFrame,
+    granularity_label: str,
+) -> None:
+    st.subheader("Bức tranh điều hành")
+    st.caption("Tab này dành cho người xem tổng quan: cần nhìn ngay xu hướng, dịch vụ chịu ảnh hưởng và rule nổi bật.")
+
+    left, right = st.columns(2)
+    with left:
+        _render_main_trend(
+            summary,
+            granularity_label,
+            "Đơn bị flag",
+            "executive_main_trend_clean",
+            chart_height=EXECUTIVE_CARD_HEIGHT,
+        )
+    with right:
+        service_summary = (
+            flags.groupby("service_name", dropna=False)
+            .agg(flagged_orders=("order_id", "nunique"))
+            .reset_index()
+            .fillna({"service_name": "Không rõ"})
+            .sort_values("flagged_orders", ascending=False)
+            .head(10)
+        )
+        service_chart = px.bar(
+            service_summary.sort_values("flagged_orders", ascending=True),
+            x="flagged_orders",
+            y="service_name",
+            orientation="h",
+            title="Top dịch vụ theo số đơn bị flag",
+        )
+        service_chart.update_layout(
+            xaxis_title=None,
+            yaxis_title=None,
+            height=EXECUTIVE_CARD_HEIGHT,
+            margin=EXECUTIVE_CHART_MARGIN,
+        )
+        st.plotly_chart(service_chart, width="stretch", key="executive_service_chart_clean")
+
+    left, right = st.columns(2)
+    with left:
+        st.markdown("#### Tổng hợp theo kỳ")
+        st.dataframe(
+            summary.rename(
+                columns={
+                    "period_start": "Kỳ bắt đầu",
+                    "total_orders_in_scope": "Tổng đơn trong tập flagged",
+                    "flagged_orders": "Đơn bị flag",
+                    "flagged_drivers": "Tài xế bị flag",
+                    "flagged_customers": "Khách hàng bị flag",
+                    "flagged_pairs": "Cặp tài xế - khách hàng",
+                }
+            ),
+            width="stretch",
+            height=EXECUTIVE_CARD_HEIGHT,
+            hide_index=True,
+        )
+    with right:
+        st.markdown("#### Nhóm WCC nào cần ưu tiên?")
+        if components.empty:
+            st.info("Không có dữ liệu nhóm WCC.")
+        else:
+            component_chart = px.bar(
+                components.head(10).sort_values("max_priority_score", ascending=False),
+                x="component_id",
+                y="max_priority_score",
+                title="Top nhóm WCC theo điểm ưu tiên",
+                hover_data=["component_size", "flagged_orders", "top_service", "top_rule"],
+            )
+            component_chart.update_layout(
+                xaxis_title=None,
+                yaxis_title=None,
+                height=EXECUTIVE_CARD_HEIGHT,
+                margin=EXECUTIVE_CHART_MARGIN,
+            )
+            component_chart.update_xaxes(tickangle=-35)
+            st.plotly_chart(component_chart, width="stretch", key="executive_component_chart_clean")
 
 
 def _render_analyst_tab(
@@ -699,14 +910,7 @@ def _render_analyst_tab(
                 }
             )
             st.dataframe(reason_view, width="stretch", hide_index=True)
-
-    st.markdown("#### Analyst cần đọc gì từ tab này?")
-    st.markdown(
-        "- Xem xu hướng metric chính đang tăng hay giảm.\n"
-        "- So sánh dịch vụ, rule và mức rủi ro để biết phần nào chịu tác động lớn nhất.\n"
-        "- Đi xuống danh sách cặp đáng nghi để chọn các case cần điều tra tiếp."
-    )
-
+  
 
 def _render_component_tab(components: pd.DataFrame, flags: pd.DataFrame) -> None:
     st.subheader("Điều tra nhóm WCC")
@@ -727,7 +931,6 @@ def _render_component_tab(components: pd.DataFrame, flags: pd.DataFrame) -> None
             "avg_network_support_score",
             "top_service",
             "top_rule",
-            "top_rule_story",
         ]
     ].rename(
         columns={
@@ -741,7 +944,6 @@ def _render_component_tab(components: pd.DataFrame, flags: pd.DataFrame) -> None
             "avg_network_support_score": "Điểm hỗ trợ mạng",
             "top_service": "Dịch vụ nổi bật",
             "top_rule": "Rule chính",
-            "top_rule_story": "Câu chuyện của rule",
         }
     )
     st.dataframe(overview.head(15), width="stretch", hide_index=True)
@@ -760,7 +962,6 @@ def _render_component_tab(components: pd.DataFrame, flags: pd.DataFrame) -> None
     st.info(
         f"Nhóm WCC này nổi bật ở dịch vụ '{component_row['top_service']}', "
         f"đang được dẫn bởi rule '{component_row['top_rule']}'. "
-        f"Câu chuyện chính: {component_row['top_rule_story']}"
     )
 
     detail_columns = [
@@ -776,7 +977,6 @@ def _render_component_tab(components: pd.DataFrame, flags: pd.DataFrame) -> None
             "network_support_score",
             "component_size",
             "risk_tier",
-            "business_rule_story",
         ]
         if column in component_flags.columns
     ]
@@ -890,7 +1090,7 @@ def render_dashboard() -> None:
 
     _render_metric_cards(metrics)
     _render_insight_cards(insights)
-    _render_executive_story(insights)
+    _render_rule_story_overview_clean(rule_overview)
     st.caption(
         "Lưu ý: nguồn hiện tại là tập đơn đã bị flag, nên 'Tổng đơn trong tập flagged' "
         "không phải tổng số đơn của toàn hệ thống."
@@ -901,7 +1101,7 @@ def render_dashboard() -> None:
     )
 
     with executive_tab:
-        _render_executive_tab(filtered_flags, period_summary, rule_overview, component_summary, granularity_label)
+        _render_executive_tab_clean(filtered_flags, period_summary, rule_overview, component_summary, granularity_label)
 
     with analyst_tab:
         _render_analyst_tab(filtered_flags, filtered_pairs, filtered_reasons, period_summary, granularity_label)

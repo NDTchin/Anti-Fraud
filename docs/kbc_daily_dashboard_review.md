@@ -1,105 +1,113 @@
 # Review Dashboard `kbc_daily_dashboard.py`
 
-Tai lieu nay danh gia dashboard trong [kbc_daily_dashboard.py](/D:/VSF/src/dashboard/kbc_daily_dashboard.py) duoi 3 goc nhin:
+Tài liệu này đánh giá dashboard trong [kbc_daily_dashboard.py](/D:/VSF/src/dashboard/kbc_daily_dashboard.py) theo logic `ride` mới nhất, với mục tiêu:
 
-- nguoi dung cuoi
-- data analyst
-- goc nhin anti-fraud / security
+- người vận hành đọc được
+- analyst đọc đúng ý nghĩa số liệu
+- dashboard không vô tình truyền tải thông điệp sai về mức độ flag
 
-Muc tieu:
+## Dashboard này đang dùng để làm gì?
 
-- chi ra diem tot dang co
-- chi ra diem chua tot hoac co rui ro
-- cap nhat dashboard review theo logic fraud moi nhat trong repo
+Nếu bỏ qua chi tiết kỹ thuật, dashboard này được dùng để trả lời 3 câu hỏi:
 
-## Pham vi danh gia
+1. Hôm nay cặp `tài xế - khách hàng` nào cần xem trước?
+2. Hệ thống đang nghi họ vì lý do gì?
+3. Có những `order` nào cần mở ra để đối chiếu nghiệp vụ?
 
-Dashboard hien tai doc chu yeu tu:
+Với logic mới, cần nhớ:
+
+- hệ thống phát hiện ở cấp `pair`
+- dashboard cho phép drill xuống cấp `order`
+- network chỉ là tăng bổ sung để mở rộng điều tra
+
+## Phạm vi đánh giá
+
+Dashboard hiện tại đọc chủ yếu từ:
 
 - [flagged_orders.parquet](/D:/VSF/reports/task3/flagged_orders.parquet)
 - [kbc_pair_summary.csv](/D:/VSF/reports/task3/kbc_pair_summary.csv)
 - [kbc_pair_reasons.csv](/D:/VSF/reports/task3/kbc_pair_reasons.csv)
 
-Can doc dashboard voi 2 luu y:
+Cần đọc dashboard với 2 lưu ý cơ bản:
 
-- day la tap da bi flag, khong phai toan bo order universe
-- mot order co the xuat hien nhieu dong neu trung nhieu `reason_code`
+- đây là tập đã bị flag, không phải toàn bộ order universe
+- một order có thể xuất hiện nhiều dòng nếu trùng nhiều `reason_code`
 
-## Tom tat dieu hanh
+## Tóm tắt điều hành
 
-Dashboard hien tai co nen tang tot de theo doi fraud hang ngay:
+Dashboard hiện tại đã có nền tảng tốt cho việc theo dõi fraud hàng ngày:
 
-- co cau truc ro
-- co KPI tong quan
-- co chart va bang detail
-- co the drill xuong order-level
+- có KPI tổng quan
+- có bảng pair-level
+- có đường xuống order-level
+- có thông tin về rule, risk tier, service, province
 
-Tuy vay, de dong bo voi phuong thuc moi nhat, dashboard va cac bao cao dashboard can sua 5 nhom van de:
+Tuy vậy, để đồng bộ với luồng `ride` mới, dashboard notes và cách trình bày nên sửa theo 5 hướng:
 
-1. Tach ro `flag rows` va `unique flagged orders`
-2. Cap nhat language de phan anh logic moi da duoc siet
-3. Giam kha nang nguoi xem hieu nham metric tong
-4. Dung `component` va `network` dung vai tro ho tro
-5. Han che lo logic fraud nhay cam cho role khong phu hop
+1. Tách rõ `flag rows` và `unique flagged orders`
+2. Đổi language từ "hệ thống bắt fraud" sang "hệ thống tìm case đáng nghi"
+3. Làm rõ pair evidence là trung tâm
+4. Giữ network dùng vai trò bổ sung
+5. Giảm khả năng lộ logic nhạy cảm cho role không cần biết quá sâu
 
-## Goc nhin 1: Nguoi dung cuoi
+## Góc nhìn 1: Người dùng cuối
 
-### Diem tot
+### Điểm tốt
 
-- Dashboard co bo cuc de theo doi nhanh tinh hinh trong ngay
-- Co the tu KPI xuong detail orders
-- Cac truong business rule, risk tier, service va province huu ich cho van hanh
+- Dashboard có bố cục để theo dõi nhanh tình hình trong ngày
+- Người dùng có thể đi từ KPI tổng quan xuống case cụ thể
+- Các trường business rule, risk tier, service và province hữu ích cho vận hành
 
-### Diem chua tot
+### Điểm cần sửa
 
-- KPI tong don rat de bi hieu nham thanh tong don cua he thong
-- Neu khong tach `flag rows` va `unique orders`, nguoi doc se bi sai ngay tu con so dau tien
-- Neu van dung ngon ngu cu, dashboard de gay cam giac he thong dang flag qua rong du logic moi da siet lai
+- KPI tổng đơn rất dễ bị hiểu nhầm thành tổng đơn của hệ thống
+- Nếu không tách `flag rows` và `unique orders`, người đọc sẽ sai ngay từ con số đầu tiên
+- Nếu vẫn dùng language cũ, dashboard có thể tạo cảm giác hệ thống đang flag quá rộng, trong khi logic mới đã được siết lại
 
-### Khuyen nghi
+### Khuyến nghị
 
-- Doi ten KPI thanh:
+- Đổi tên KPI thành:
   - `Flag Rows`
   - `Unique Flagged Orders`
-- Them ghi chu ngan:
-  - `Mot order co the co nhieu reason_code`
-- Neu co the, hien them delta truoc/sau cho ngay `2026-07-24` de minh hoa tac dong cua viec siet logic
+- Thêm ghi chú ngắn gọn KPI:
+  - `Một order có thể trùng nhiều reason_code`
+- Nếu có cho hiện note tổng quan, nên ghi rõ:
+  - `Hệ thống ưu tiên cấp tài xế - khách hàng đáng nghi, sau đó mới đưa order ra review`
 
-## Goc nhin 2: Data Analyst
+## Góc nhìn 2: Data Analyst
 
-### Diem tot
+### Điểm tốt
 
-- Da co du lieu o 3 cap:
-  - order
+- Đã có dữ liệu ở 3 cấp để analyst làm việc:
   - pair
   - pair reason
-- Da co bo score tuong doi day du:
+  - order
+- Đã có 3 lớp điểm rõ ràng:
   - `pair_core_score`
   - `network_support_score`
   - `priority_score`
-- Da co san du lieu `component`
 
-### Diem chua tot
+### Điểm cần sửa
 
-- Dashboard review cu co nguy co doc nham `flag rows` thanh `unique orders`
-- Neu analyst nhin `SUPERFAST_GAP` theo logic cu, se danh gia sai do manh cua temporal evidence
-- Chua nhan manh ro rang rang network support la bang chung ho tro, khong phai first-pass detector
+- Dashboard review cũ dễ analyst đọc nhầm `flag rows` thành `unique orders`
+- Nếu analyst vẫn hiểu `SUPERFAST_GAP` theo logic cũ, sẽ đánh giá quá mạnh temporal evidence
+- Chưa nhấn mạnh đủ rằng network support là tăng hỗ trợ, không phải bộ detector đầu tiên
 
-### Khuyen nghi
+### Khuyến nghị
 
-- O phan notes hoac data dictionary, ghi ro:
-  - `pair` la don vi phat hien
-  - `order` la cap materialization
-  - `component` la cap mo rong dieu tra
-- Neu hien top reasons, nen ghi kem dinh nghia operational moi:
-  - `SUPERFAST_GAP` chi hop le khi gap khong am, du so trip, va co ghost support toi thieu
-- Neu hien `high_confidence`, nen ghi ro rang label nay da duoc siet lai
+- Ở phần notes hoặc data dictionary, ghi rõ:
+  - `pair` là đơn vị phát hiện
+  - `order` là đơn vị materialize để review
+  - `component` là đơn vị mở rộng điều tra
+- Nếu hiện top reasons, nên ghi kèm định nghĩa operational mới:
+  - `SUPERFAST_GAP` chỉ hợp lệ khi gap không âm, đủ số trip, và có ghost support tối thiểu
+- Nếu hiện `high_confidence`, nên ghi rõ label này đã được siết lại
 
-## Goc nhin 3: Anti-fraud / Security
+## Góc nhìn 3: Anti-fraud / Security
 
-### Dashboard dang lo gi
+### Dashboard đang lộ những gì
 
-Neu khong phan quyen, dashboard van de lo:
+Nếu không phân quyền phù hợp, dashboard có thể lộ quá nhiều chi tiết như:
 
 - `reason_code`
 - `priority_score`
@@ -108,62 +116,64 @@ Neu khong phan quyen, dashboard van de lo:
 - `linked_pair_count`
 - `supporting_signal_count`
 
-### Rủi ro nghiep vu
+### Rủi ro nghiệp vụ
 
-- Nguoi xau co the hoc nguoc he thong dang nhay vao dau
-- Ho co the suy ra threshold va pattern can tranh
-- Viec lo qua nhieu chi tiet temporal / network co the lam giam hieu qua anti-fraud
+- Người xấu có thể học ngược hệ thống đang để ý tới đâu
+- Họ có thể đoán được threshold và pattern cần tránh
+- Việc lộ quá nhiều chi tiết temporal / network có thể giảm hiệu quả anti-fraud
 
-### Khuyen nghi
+### Khuyến nghị
 
-- Tach role view:
+- Tách role view:
   - executive view
   - analyst view
   - investigator view
-- Mac dinh chi show business-rule level cho role thong thuong
-- An hoac mask `reason_code`, `priority_score`, `component_id` neu role khong du quyen
+- Mặc định chỉ show business-rule level cho role thông thường
+- Ẩn hoặc mask `reason_code`, `priority_score`, `component_id` nếu role không đủ quyền
 
-## Component-level review
+## Component-level review nên được diễn giải thế nào
 
-Pipeline hien tai da su dung `WCC`, nen dashboard nen tan dung du lieu nay tot hon.
+Pipeline hiện tại đã dùng `WCC`, nên dashboard có thể tận dụng `component` để mở rộng điều tra.
 
-Nen co toi thieu:
+Những thông điệp cần giữ rất rõ:
 
-- KPI `Largest WCC Component`
-- bang top components theo:
-  - `component_size`
-  - `component_edge_count`
-  - `avg/max priority_score`
-  - `avg/max network_support_score`
-- chi tiet component:
-  - so driver
-  - so customer
-  - so pair
-  - so order
-  - top rule
+- component giúp tìm nhóm liên quan
+- component không phải bằng chứng kết luận độc lập
+
+Nếu bổ sung thêm card / table, nên ưu tiên:
+
+- `Largest WCC Component`
+- top components theo `component_size`
+- top components theo `avg` hoặc `max priority_score`
+- chi tiết component:
+  - số driver
+  - số customer
+  - số pair
+  - số order
+  - top business rule
   - top service
 
-Thong diep can giu dong nhat voi logic moi:
+## P0 cần update trong docs và dashboard notes
 
-- component giup mo rong dieu tra
-- component khong duoc doc nhu bang chung ket luan fraud doc lap
+- Tách rõ `flag rows` và `unique flagged orders`
+- Thêm ghi chú rằng một order có thể trùng nhiều `reason_code`
+- Cập nhật mô tả `SUPERFAST_GAP` theo logic mới
+- Cập nhật mô tả `high_confidence` theo logic mới
+- Cập nhật thông điệp rằng pair evidence là trung tâm, network evidence là hỗ trợ
 
-## P0 can update trong docs va dashboard notes
+## P1 nên làm tiếp
 
-- Tach ro `flag rows` va `unique flagged orders`
-- Them ghi chu rang mot order co the match nhieu `reason_code`
-- Cap nhat mo ta `SUPERFAST_GAP` theo logic moi
-- Cap nhat mo ta `high_confidence` theo logic moi
-- Cap nhat phan giai thich rang pair evidence la trung tam, network evidence la ho tro
+- Thêm insight card `Highest-Risk Component`
+- Thêm breakdown theo `business_rule_label` và `risk_tier`
+- Thêm data notes về phạm vi dữ liệu và ý nghĩa từng metric
+- Thêm benchmark trước/sau khi siết logic cho các ngày spike lớn
 
-## P1 nen lam tiep
+## Kết luận
 
-- Them insight card `Highest-Risk Component`
-- Them breakdown theo `business_rule_label` va `risk_tier`
-- Them data notes ve pham vi du lieu va y nghia tung metric
-- Them benchmark truoc/sau khi siet logic cho cac ngay spike lon
+Dashboard hiện tại vẫn là nền tảng tốt cho bài toán `ride`, nhưng cách viết docs và note đi kèm cần đổi sang ngôn ngữ để business và vận hành dễ hiểu hơn.
 
-## Ket luan
+Thông điệp chốt cần giữ đồng bộ:
 
-Dashboard hien tai van la nen tang tot, nhung cach doc dashboard phai duoc cap nhat theo implementation moi nhat.
-
+- hệ thống tìm cặp đáng nghi trước
+- hệ thống giải thích lý do sau
+- con người review order cuối cùng

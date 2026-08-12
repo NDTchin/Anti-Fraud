@@ -2,35 +2,35 @@
 
 ## Problem statement
 
-Sprint 2 duoc reset scope de di dung mot pattern gian lan cu the:
+Sprint 2 được reset scope để đi đúng một pattern gian lận cụ thể:
 
-- driver va customer thong dong tao ghost trips
-- cung mot pair lap lai voi tan suat bat thuong
-- hanh vi nghi ngo duoc nhin truoc het o cap `driver-customer pair`
+- driver và customer thông đồng tạo ghost trips
+- cùng một pair lặp lại với tần suất bất thường
+- hành vi nghi ngờ được nhìn trước hết ở cấp `driver-customer pair`
 
-Tai lieu nay theo sat huong:
+ Tài liệu này theo sát hướng:
 
 - `docs/graph_algorithms_for_driver_customer_ghost_trip_collusion.md`
 
 ## Sprint 2 objective
 
-Muc tieu cua Sprint 2 khong phai build mot fraud engine day du ngay lap tuc.
+Mục tiêu của Sprint 2 không phải build một fraud engine đầy đủ ngay lập tức.
 
-Muc tieu dung hon la xay duoc `graph core MVP` cho bai toan:
+Mục tiêu đúng hơn là xây được `graph core MVP` cho bài toán:
 
 1. shortlist suspicious pairs
-2. score muc do collusion cua pair
+2. score mức độ collusion của pair
 3. gom pair thanh suspicious components de review
 
-## Graph abstraction can chot
+## Graph abstraction chốt
 
-Don vi graph trung tam:
+Đơn vị graph trung tâm:
 
 - node `Driver`
 - node `Customer`
-- weighted edge giua `Driver` va `Customer`
+- weighted edge giữa `Driver` và `Customer`
 
-Tren moi edge can co toi thieu:
+Trên mỗi edge cần có tối thiểu:
 
 - `trip_count`
 - `driver_trip_count`
@@ -38,11 +38,11 @@ Tren moi edge can co toi thieu:
 - `pair_share_driver`
 - `pair_share_customer`
 
-Day la abstraction du de chay MVP ma khong phu thuoc vao nhieu feature phu.
+Đây là abstraction đủ để chạy MVP mà không phụ thuộc vào nhiều feature phụ.
 
 ## Algorithms trong scope Sprint 2
 
-Sprint 2 chi nen chot 3 graph algorithms cot loi:
+Sprint 2 chỉ nên chốt 3 graph algorithms cốt lõi:
 
 1. `Weighted edge outlier detection`
 2. `Bipartite concentration scoring`
@@ -50,27 +50,27 @@ Sprint 2 chi nen chot 3 graph algorithms cot loi:
 
 ## 1. Weighted edge outlier detection
 
-Dung de:
+Dùng để:
 
-- tim pair co `trip_count` nam o tail cua phan phoi
+- tìm pair có `trip_count` nằm ở tail của phân phối
 
-Day la first-pass detector va la nguon tao suspicious seeds.
+Đây là first-pass detector và là nguồn tạo suspicious seeds.
 
 ## 2. Bipartite concentration scoring
 
-Dung de:
+Dùng để:
 
-- do xem pair co chiem mot ty trong bat thuong tren ca phia driver va customer hay khong
+- đo xem pair có chiếm một tỷ trọng bất thường trên cả phía driver và customer hay không
 
-Day la lop refinement quan trong nhat de xac dinh collusion thay vi chi nhin volume thuan tuy.
+Đây là lớp refinement quan trọng nhất để xác định collusion thay vì chỉ nhìn volume thuần túy.
 
 ## 3. WCC
 
-Dung de:
+Dùng để:
 
-- gom suspicious pairs thanh component tren suspicious graph
+- gom suspicious pairs thành component trên suspicious graph
 
-Suspicious graph duoc noi bang cac shared entities huu ich cho dieu tra, vi du:
+Suspicious graph được nối bằng các shared entities hữu ích cho điều tra, ví dụ:
 
 - shared address
 - shared payment
@@ -78,38 +78,38 @@ Suspicious graph duoc noi bang cac shared entities huu ich cho dieu tra, vi du:
 - shared driver
 - shared customer
 
-## Ngoai scope Sprint 2 core
+## Ngoài scope Sprint 2 core
 
-Cac y tuong sau co the lam sau, nhung khong nen la blocker cua Sprint 2:
+Các ý tưởng sau có thể làm sau, nhưng không nên là blocker của Sprint 2:
 
 - temporal anomaly scoring
 - ghost-rate scoring
 - route-loop scoring
 - Louvain
 - k-core
-- node similarity tong quat
+- node similarity tổng quát
 
-Ly do:
+Lý do:
 
-- khong can de chot MVP graph core
-- de tao scope qua rong
-- de lam mo bai toan repeated pair collusion
+- không cần để chốt MVP graph core
+- để tạo scope quá rộng
+- để làm mờ bài toán repeated pair collusion
 
-## Deliverables nen co o cuoi Sprint 2
+## Deliverables nên có ở cuối Sprint 2
 
-Sprint 2 nen ket thuc voi cac dau ra sau:
+Sprint 2 nên kết thúc với các đầu ra sau:
 
 1. `pair table` theo time window
-2. `volume_score` cho moi pair
-3. `concentration_score` cho moi pair
+2. `volume_score` cho mỗi pair
+3. `concentration_score` cho mỗi pair
 4. `suspicious_pair_list`
 5. `suspicious_graph`
-6. `component_id` va `component_size`
-7. `flagged_orders` de analyst review
+6. `component_id` và `component_size`
+7. `flagged_orders` để analyst review
 
 ## Proposed build order
 
-Thu tu trien khai de tranh scope creep:
+Thứ tự triển khai để tránh scope creep:
 
 1. Build pair stats
 2. Run weighted edge outlier detection
@@ -117,46 +117,32 @@ Thu tu trien khai de tranh scope creep:
 4. Define suspicious pair criteria
 5. Build suspicious graph
 6. Run WCC
-7. Materialize pair/component evidence xuong order level
+7. Materialize pair/component evidence xuống order level
 
-## Role cua operational signals
+## Role của operational signals
 
-`ghost_rate`, `min_gap_min`, va `route reuse` van phu hop voi bai toan ghost-trip, nhung trong Sprint 2 chung nen duoc xep la:
+`ghost_rate`, `min_gap_min`, và `route reuse` vẫn phù hợp với bài toán ghost-trip, nhưng trong Sprint 2 chúng nên được xếp là:
 
 - enrichment signals
 - tie-breaker signals
 - explainability signals
 
-Khong nen dung chung de dinh nghia graph scope chinh.
-
-## Operational update sau khi siet pipeline
-
-Sau khi pipeline duoc cap nhat trong repo vao `2026-08-11`, co them vai tro van hanh can ghi nhan:
-
-- `ghost_rate` van co the dua pair vao shortlist neu qua manh
-- `min_gap_min` chi con co gia tri khi duoc tinh dung sau khi sort va khi gap khong am
-- network component khong duoc dung nhu bang chung doc lap de ket luan pair fraud
-
-Vi vay, khi doc Sprint 2 theo trang thai hien tai cua repo, nen hieu:
-
-- `graph core MVP` van khong doi
-- nhung cac default gates da duoc siet lai de output an toan hon cho du lieu gan production
+Không nên dùng chung để định nghĩa graph scope chính.
 
 ## Success criteria
 
-Sprint 2 duoc xem la dat huong dung neu:
+Sprint 2 được xem là đạt hướng đúng nếu:
 
-- pair-level detection tro thanh trung tam pipeline
-- 3 graph algorithms cot loi da duoc dinh nghia ro
-- suspicious components co the duoc xuat ra de mo case dieu tra
-- cac signal ngoai core duoc dat dung vi tri la enrichment
+- pair-level detection trở thành trung tâm pipeline
+- 3 graph algorithms cốt lõi đã được định nghĩa rõ
+- suspicious components có thể được xuất ra để mở case điều tra
+- các signal ngoài core được đặt đúng vị trí là enrichment
 
 ## Final note
 
-Neu can giam scope de dam bao tien do, thu tu uu tien tuyet doi trong Sprint 2 la:
+Nếu cần giảm scope để đảm bảo tiến độ, thứ tự ưu tiên tuyệt đối trong Sprint 2 là:
 
 1. `Weighted edge outlier detection`
 2. `Bipartite concentration scoring`
 3. `WCC`
 
-Day la bo MVP dung nhat voi huong lam lai project hien tai.

@@ -1,36 +1,36 @@
-# Note Ve Property Va Relationship Cho Du Lieu `ride` / `food`
+# Note Ve Property Va Relationship Cho Dữ Liệu `ride` / `food`
 
-## Pham vi tai lieu
+## Phạm vi tài liệu
 
-Tai lieu nay giai thich vai tro cua `property` va `relationship` trong order graph hien co, nhung duoc viet lai de phu hop voi huong moi cua project:
+Tai liệu này giải thích vai trò của `property` và `relationship` trong order graph hiện có, nhưng được viết lại để phù hợp với hướng mới của project:
 
 - `docs/graph_algorithms_for_driver_customer_ghost_trip_collusion.md`
 
-Muc tieu la lam ro:
+Mục tiêu là làm rõ:
 
-- du lieu nao la `graph core input`
-- du lieu nao la `shared-entity support`
-- du lieu nao la `optional enrichment`
+- dữ liệu nào là `graph core input`
+- dữ liệu nào là `shared-entity support`
+- dữ liệu nào là `optional enrichment`
 
-## Ket luan nhanh
+## Kết luận nhanh
 
-Trong huong moi, schema order graph nen duoc hieu theo 3 lop:
+Trong hướng mới, schema order graph nên được hiểu theo 3 lớp:
 
 1. `pair graph inputs`
 2. `suspicious graph inputs`
 3. `enrichment attributes`
 
-Noi cach khac:
+Nói cách khác:
 
-- khong phai moi property/relationship deu co vai tro ngang nhau
-- uu tien cao nhat la cac thanh phan giup aggregate thanh pair `driver-customer`
-- uu tien ke tiep la cac thanh phan giup noi suspicious pairs de chay `WCC`
+- không phải mọi property/relationship đều có vai trò ngang nhau
+- ưu tiên cao nhất là các thành phần giúp aggregate thành pair `driver-customer`
+- ưu tiên kế tiếp là các thành phần giúp nối suspicious pairs để chạy `WCC`
 
 ## 1. Pair graph inputs
 
-Day la nhung thanh phan quan trong nhat neu project di theo 3 graph algorithms cot loi.
+Đây là những thành phần quan trọng nhất nếu project đi theo 3 graph algorithms cốt lõi.
 
-Can co:
+Cần có:
 
 - node `Order`
 - node `Driver`
@@ -38,7 +38,7 @@ Can co:
 - `(:Customer)-[:PLACED]->(:Order)`
 - `(:Driver)-[:SERVED]->(:Order)`
 
-Tu nhung lien ket nay downstream moi co the tong hop thanh:
+Từ những liên kết này downstream mới có thể tổng hợp thành:
 
 - `trip_count`
 - `driver_trip_count`
@@ -46,20 +46,20 @@ Tu nhung lien ket nay downstream moi co the tong hop thanh:
 - `pair_share_driver`
 - `pair_share_customer`
 
-Neu thieu lop nay, khong the build dung `weighted edge outlier detection` va `bipartite concentration scoring`.
+Nếu thiếu lớp này, không thể build đúng `weighted edge outlier detection` và `bipartite concentration scoring`.
 
 ## 2. Suspicious graph inputs
 
-Day la lop du lieu dung de noi suspicious pairs thanh network phuc vu `WCC`.
+Đây là lớp dữ liệu dùng để nối suspicious pairs thành network phục vụ `WCC`.
 
-Quan trong nhat:
+Quan trọng nhất:
 
 - `Address`
 - `PaymentMethod`
 - `PromotionCode`
 - `PromotionCampaign`
 
-Quan he lien quan:
+Quan hệ liên quan:
 
 - `PICKUP_AT`
 - `DROPOFF_AT`
@@ -67,19 +67,19 @@ Quan he lien quan:
 - `USED_PROMO`
 - `IN_CAMPAIGN`
 
-Vai tro:
+Vai trò:
 
-- noi pair qua shared address
-- noi pair qua shared payment
-- noi pair qua shared promo
+- nối pair qua shared address
+- nối pair qua shared payment
+- nối pair qua shared promo
 
-Day la phan schema phuc vu truc tiep cho suspicious graph, khac voi pair graph core nhung van la mandatory support cho giai doan cluster investigation.
+Đây là phần schema phục vụ trực tiếp cho suspicious graph, khác với pair graph core nhưng vẫn là mandatory support cho giai đoạn cluster investigation.
 
 ## 3. Enrichment attributes
 
-Nhom nay van huu ich, nhung khong phai trung tam cua huong moi.
+Nhóm này vẫn hữu ích, nhưng không phải trung tâm của hướng mới.
 
-Vi du:
+Ví dụ:
 
 - `avg_kmh`
 - `declared_km`
@@ -95,68 +95,68 @@ Vi du:
 - `travel_mode`
 - `channel_type`
 
-Chung co the duoc dung de:
+Chung có thể được dùng để:
 
-- tao business filters
-- giai thich case
-- tinh enrichment signals sau nay
+- tạo business filters
+- giải thích case
+- tính enrichment signals sau này
 
-Nhung khong nen lam mo 2 lop uu tien cao hon.
+Nhưng không nên làm lu mờ 2 lớp ưu tiên cao hơn.
 
-## 4. Cach hieu dung mo hinh lai property + relationship
+## 4. Cách hiểu đúng mô hình lai property + relationship
 
-Schema hien co co nhieu nhom du lieu vua ton tai duoi dang `property` tren `Order`, vua ton tai duoi dang node/relationship chuan hoa.
+Schema hiện có có nhiều nhóm dữ liệu vừa tồn tại dưới dạng `property` trên `Order`, vừa tồn tại dưới dạng node/relationship chuẩn hóa.
 
-Dieu nay van hop ly trong huong moi vi:
+Điều này vẫn hợp lý trong hướng mới vì:
 
-- property giup filter nhanh va lam feature table
-- relationship giup graph traversal va shared-entity linking
+- property giúp filter nhanh và làm feature table
+- relationship giúp graph traversal và shared-entity linking
 
-Do do, khong can ep buoc schema ve mot cuc:
+Do đó, không cần ép buộc schema về một cực:
 
-- "chi property"
-- hoac "chi relationship"
+- "chỉ property"
+- hoặc "chỉ relationship"
 
-Can danh gia moi truong theo cau hoi:
+Cần đánh giá mọi trường theo câu hỏi:
 
-- co phuc vu pair graph khong?
-- co phuc vu suspicious graph khong?
-- hay chi la enrichment?
+- có phục vụ pair graph không?
+- có phục vụ suspicious graph không?
+- hay chỉ là enrichment?
 
-## 5. Cac thanh phan quan trong nhat doi voi huong `Driver-Customer Ghost-Trip Collusion`
+## 5. Các thành phần quan trọng nhất đối với hướng `Driver-Customer Ghost-Trip Collusion`
 
-Neu phai uu tien schema theo tac dong toi huong moi, thu tu nen la:
+Nếu phải ưu tiên schema theo tác động tới hướng mới, thứ tự nên là:
 
 1. `Driver`, `Customer`, `Order`
 2. `PLACED`, `SERVED`
 3. `Address`, `PaymentMethod`, `PromotionCode`
 4. `PICKUP_AT`, `DROPOFF_AT`, `PAID_BY`, `USED_PROMO`
-5. metric va taxonomy enrichment
+5. metric và taxonomy enrichment
 
-Day la cach nhin schema phu hop nhat voi pipeline:
+Đây là cách nhìn schema phù hợp nhất với pipeline:
 
 1. build pair table
 2. score suspicious pairs
 3. build suspicious graph
 4. run `WCC`
 
-## 6. Food va ride nen duoc doc the nao trong boi canh nay
+## 6. Food và ride nên được đọc thế nào trong bối cảnh này
 
-`ride` la domain uu tien cho huong moi, vi bai toan hien tai la `Driver-Customer Ghost-Trip Collusion`.
+`ride` là domain ưu tiên cho hướng mới, vì bài toán hiện tại là `Driver-Customer Ghost-Trip Collusion`.
 
-Do do:
+Do đó:
 
-- cac lien ket giua `Driver`, `Customer`, `Order` la trong tam
-- shared entities phuc vu repeated pair investigation la trong tam
+- các liên kết giữa `Driver`, `Customer`, `Order` là trọng tâm
+- shared entities phục vụ repeated pair investigation là trọng tâm
 
-`food` van co gia tri o muc schema dung chung, nhung khong nen chi phoi cach mo ta uu tien modeling cho bai toan nay.
+`food` vẫn có giá trị ở mức schema dùng chung, nhưng không nên chi phối cách mô tả ưu tiên modeling cho bài toán này.
 
 ## 7. Final note
 
-Khi doc schema hien co de phuc vu huong moi, nen nho:
+Khi doc schema hiện có để phục vụ hướng mới, nên nhớ:
 
-- `Order` graph la tang luu tru va truy vet
-- `pair graph` moi la tang phan tich cot loi
-- `suspicious graph` la tang dieu tra network
+- `Order` graph là tầng lưu trữ và truy vết
+- `pair graph` mới là tầng phân tích cốt lõi
+- `suspicious graph` là tầng điều tra network
 
-Vi vay, doc/schema note nay nen duoc hieu nhu mot tai lieu canh chinh uu tien du lieu cho bai toan pair-collusion, khong phai mot ban inventory trung lap moi field trong importer.
+Vì vậy, doc/schema note này nên được hiểu như một tài liệu định hướng ưu tiên dữ liệu cho bài toán pair-collusion, không phải một bản inventory trùng lặp mới field trong importer.

@@ -1,84 +1,84 @@
-# Graph Algorithms Dang Duoc Chon Cho Huong Di Moi Cua Project
+# Graph Algorithms Đang Được Chọn Cho Hướng Đi Mới Của Project
 
-## Pham vi tai lieu
+## Phạm vi tài liệu
 
-Tai lieu nay mo ta bo graph algorithms nen duoc xem la huong chinh moi cua project cho bai toan:
+Tài liệu này mô tả bộ graph algorithms đang được chọn cho hướng đi mới của project, tập trung vào bài toán:
 
 - `Driver-Customer Ghost-Trip Collusion`
 
-Nguon dinh huong goc:
+Nguồn định hướng gốc:
 
 - `docs/graph_algorithms_for_driver_customer_ghost_trip_collusion.md`
 
-## Ket luan nhanh
+## Kết luận nhanh
 
-Project nen tap trung vao 3 graph algorithms cot loi:
+Project nên tập trung vào 3 graph algorithms cốt lõi:
 
 1. `Weighted edge outlier detection`
 2. `Bipartite concentration scoring`
 3. `WCC`
 
-Ba thanh phan nay tuong ung voi 3 cau hoi chinh:
+Ba thành phần này tương ứng với 3 câu hỏi chính:
 
-1. Pair nao lap lai bat thuong?
-2. Pair nao that su co tinh collusion cao?
-3. Cac pair nghi ngo co ket noi thanh network de mo case dieu tra hay khong?
+1. Pair nào lặp lại bất thường?
+2. Pair nào thật sự có tính collusion cao?
+3. Các pair nghi ngờ có kết nối thành network để mở case điều tra hay không?
 
-## 1. Don vi phan tich trung tam
+## 1. Đơn vị phân tích trung tâm
 
-Don vi phan tich chinh khong phai tung order rieng le, ma la pair:
+Đơn vị phân tích chính không phải từng order riêng lẻ, mà là pair:
 
 - `driver_id`
 - `customer_id`
 
-Moi pair duoc xem la mot canh co trong so trong do thi hai phia:
+Mỗi pair được xem là một cạnh có trọng số trong đồ thị hai phía:
 
-- ben trai: `Driver`
-- ben phai: `Customer`
-- trong so canh: `trip_count`
+- bên trái: `Driver`
+- bên phải: `Customer`
+- trọng số cạnh: `trip_count`
 
-Day la abstraction dung nhat cho bai toan ghost-trip collusion vi hanh vi gian lan thuong tap trung vao quan he lap lai giua hai dau mut.
+Đây là abstraction dùng nhất cho bài toán ghost-trip collusion vì hành vi gian lận thường tập trung vào quan hệ lặp lại giữa hai đầu.
 
-## 2. Bo 3 thuat toan cot loi
+## 2. Bộ 3 thuật toán cốt lõi
 
 ## 2.1. Weighted edge outlier detection
 
-Muc tieu:
+Mục tiêu:
 
-- tim cac pair co `trip_count` nam o phan duoi cua phan phoi toan bo pairs trong cung time window
+- tìm các pair có `trip_count` nằm ở phần dưới của phân phối toàn bộ pairs trong cùng time window
 
-Vai tro:
+Vai trò:
 
 - first-pass detector
-- tao seed suspicious pairs
-- de giai thich va de scale
+- tạo seed suspicious pairs
+- dễ giải thích và dễ scale
 
-Day la lop phat hien dau tien, nhung khong nen dung mot minh de ket luan collusion.
+Đây là lớp phát hiện đầu tiên, nhưng không nên dùng một mình để kết luận collusion.
 
 ## 2.2. Bipartite concentration scoring
 
-Muc tieu:
+Mục tiêu:
 
-- do xem mot pair co chiem ti trong bat thuong tren ca hai dau mut hay khong
+- đo xem một pair có chiếm tỉ trọng bất thường trên cả hai đầu hay không
 
-Feature cot loi:
+Feature cốt lõi:
 
 - `pair_share_driver = pair_trip_count / total_driver_trip_count`
 - `pair_share_customer = pair_trip_count / total_customer_trip_count`
 
-Vai tro:
+Vai trò:
 
 - refinement layer cho suspicious pairs
-- giam false positive tu volume tuyet doi
-- bat dung ban chat "khoa cung" giua driver va customer
+- giảm false positive từ volume tuyệt đối
+- bắt đúng bản chất "khóa cứng" giữa driver và customer
 
 ## 2.3. WCC
 
-Muc tieu:
+Mục tiêu:
 
-- gom cac pair nghi ngo thanh `component` de phuc vu dieu tra
+- gom các pair nghi ngờ thanh `component` de phuc vu dieu tra
 
-WCC duoc chay tren suspicious graph, noi cac suspicious pairs qua shared entities nhu:
+WCC được chạy trên suspicious graph, nối các suspicious pairs qua shared entities nhu:
 
 - shared driver
 - shared customer
@@ -86,80 +86,80 @@ WCC duoc chay tren suspicious graph, noi cac suspicious pairs qua shared entitie
 - shared payment
 - shared promo
 
-Vai tro:
+Vai trò:
 
-- chuyen tu pair detection sang network investigation
-- tao `component_id`, `component_size`, danh sach member, va do uu tien mo case
+- chuyển từ pair detection sang network investigation
+- tạo `component_id`, `component_size`, danh sách member, và độ ưu tiên mở case
 
-## 3. Pipeline nen duoc xem la chuan
+## 3. Pipeline nên được xem là chuẩn
 
-Pipeline graph-first duoc uu tien trong huong moi:
+Pipeline graph-first được ưu tiên trong hướng mới:
 
 1. Build pair table theo time window
-2. Tinh `trip_count`, `driver_trip_count`, `customer_trip_count`
-3. Tinh `pair_share_driver`, `pair_share_customer`
-4. Chay `weighted edge outlier detection`
-5. Chay `bipartite concentration scoring`
-6. Tao suspicious pair list
-7. Build suspicious graph tu shared entities
-8. Chay `WCC`
-9. Rank pair va rank component de analyst review
+2. Tính `trip_count`, `driver_trip_count`, `customer_trip_count`
+3. Tính `pair_share_driver`, `pair_share_customer`
+4. Chạy `weighted edge outlier detection`
+5. Chạy `bipartite concentration scoring`
+6. Tạo suspicious pair list
+7. Build suspicious graph từ shared entities
+8. Chạy `WCC`
+9. Rank pair và rank component để analyst review
 
-## 4. Cac signal nen duoc xem la enrichment, khong phai graph core
+## 4. Các signal nên được xem là enrichment, không phải graph core
 
-Cac signal sau van huu ich, nhung trong huong moi chung khong phai bo 3 graph algorithms cot loi:
+Các signal sau vẫn hữu ích, nhưng trong hướng mới chúng không phải bộ 3 graph algorithms cốt lõi:
 
 - `ghost_rate` tu `avg_kmh = 0`
-- `min_gap_min` hoac superfast repeat gap
+- `min_gap_min` hoặc superfast repeat gap
 - `dominant_route_share`
 - route reuse templates
 - script similarity
 
-Nen xem chung la:
+Nên xem chúng là:
 
 - `operational fraud signals`
 - `business enrichment`
 - `precision boosters`
 
-Khong nen de cac signal nay chi phoi kien truc graph core cua project.
+Không nên để các signal này chi phối kiến trúc graph core của project.
 
-## 5. Nhung gi khong con la uu tien giai doan dau
+## 5. Những gì không còn là ưu tiên giai đoạn đầu
 
-O giai doan MVP va huong lam lai project, khong nen dat cac thuat toan sau lam trung tam:
+Ở giai đoạn MVP và hướng làm lại project, không nên đặt các thuật toán sau làm trung tâm:
 
 - `Louvain`
 - `k-core`
-- `node similarity` tong quat
-- ring scoring phuc tap
+- `node similarity` tổng quát
+- ring scoring phức tạp
 
-Ly do:
+Lý do:
 
-- kho explain hon
-- can graph phong phu hon moi phat huy tac dung
-- khong sat bai toan repeated pair bang bo 3 cot loi
+- khó explain hơn
+- cần graph phong phú hơn mới phát huy tác dụng
+- không sát bài toán repeated pair bằng bộ 3 cốt lõi
 
-## 6. Cach dinh vi tai lieu nay so voi implementation
+## 6. Cách định vị tài liệu này so với implementation
 
-Tai lieu nay la `target architecture note`, khong phai bao cao "as-is".
+Tai liệu này là `target architecture note`, không phải báo cáo "as-is".
 
-Neu implementation hien tai co them:
+Nếu implementation hiện tại có thêm:
 
 - ghost rules
 - fast-gap rules
 - route-loop rules
 - blended risk score
 
-thi nen hieu do la phan di san hoac enrichment. Huong moi can duoc mo ta va danh gia theo logic:
+thì nên hiểu đó là phần di sản hoặc enrichment. Hướng mới cần được mô tả và đánh giá theo logic:
 
-- core graph pipeline truoc
+- core graph pipeline trước
 - enrichment sau
 
 ## 7. Final recommendation
 
-Neu can chot bo graph algorithms de build lai project theo huong gon, dung trong tam, de ban giao va de explain, thi bo can chot la:
+Nếu cần chốt bộ graph algorithms để build lại project theo hướng gọn, đúng trọng tâm, để bàn giao và để explain, thì bộ cần chốt là:
 
 1. `Weighted edge outlier detection`
 2. `Bipartite concentration scoring`
 3. `WCC`
 
-Day la bo khung graph chinh. Moi signal khac nen duoc gan vao nhu lop ho tro sau khi bo khung nay on dinh.
+Đây là bộ khung graph chính. Mỗi signal khác nên được gán vào như lớp hỗ trợ sau khi bộ khung này ổn định.

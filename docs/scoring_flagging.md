@@ -1,237 +1,249 @@
-# Scoring Va Flagging 
+# Scoring và Flagging
 
-## Pham vi tai lieu
+## Phạm vi tài liệu
 
-Tai lieu nay mo ta cach nen to chuc scoring va flagging khi project duoc lam lai theo huong:
+Tai liệu này mô tả cách scoring và flagging nên được hiểu trong luồng `ride` hiện tại.
 
-- `docs/graph_algorithms_for_driver_customer_ghost_trip_collusion.md`
+Tập trung vào 3 việc:
 
-Muc tieu la tach ro:
+- hệ thống chấm điểm trên đơn vị nào
+- hệ thống đưa kết quả ra dashboard theo cách nào
+- người đọc cần hiểu các con số ra sao để tránh hiểu sai
 
-- `graph core`
-- `optional enrichment`
-- `flagging output`
+Tai liệu này theo hướng graph-first của bài toán `Driver-Customer Ghost-Trip Collusion`.
 
-## Ket luan nhanh
+## Kết luận nhanh
 
-Scoring nen duoc to chuc thanh 3 lop:
+Nếu cần bạn tóm tắt cho non-tech, hệ thống đang hoạt động như sau:
 
-1. `pair core score`
-2. `network support score`
-3. `investigation priority`
+1. Tìm cặp `tài xế - khách hàng` lặp lại bất thường
+2. Chấm điểm độ bất thường của chính cặp đó
+3. Kiểm tra xem cặp đó có nằm trong cụm đáng nghi không
+4. Tổng hợp điểm để xếp thứ tự review
+5. Đưa các `order` liên quan ra để con người xem
 
-Trong do:
+Vi vậy, scoring nên được hiểu thành 3 lớp:
 
-- `pair core score` den tu `weighted edge outlier detection` va `bipartite concentration scoring`
-- `network support score` den tu suspicious graph va `WCC`
-- `investigation priority` la diem cuoi de xep thu tu review
+1. `pair_core_score`
+2. `network_support_score`
+3. `priority_score`
 
-Flagging van nen materialize xuong cap `order`, nhung logic phat hien va cham diem phai duoc xac lap o cap `driver-customer pair`.
+## Cập nhật implementation
 
-## Cap nhat implementation 2026-08-11
+Pipeline hiện tại đã được siết lại theo hướng giảm false positive và giảm noise:
 
-Pipeline hien tai da duoc siet lai theo huong giam false positive va giam noise:
+- đã sửa cách tính `min_gap_min` để luôn sort đúng trước khi tính khoảng cách thời gian
+- không còn chấp nhận `min_gap_min` âm làm bằng chứng cho `SUPERFAST_GAP`
+- shortlist suspicious pair mặc định chặt hơn trước
+- network support tiếp tục chỉ đóng vai trò bổ sung
 
-- da sua bug tinh `min_gap_min` de luon `sort` dung truoc khi tinh `diff()`
-- khong con chap nhan `min_gap_min` am lam bang chung `SUPERFAST_GAP`
-- suspicious pair shortlist mac dinh da chat hon
-- network support tiep tuc la bang chung ho tro, khong duoc thay the pair evidence
 
-Tac dong da do tren ngay `2026-07-24`:
+## 1. Đơn vị scoring chính
 
-- truoc update: `3,019` `unique orders` bi flag
-- sau update: `482` `unique orders` bi flag
-- giam `2,537` orders, tuong duong khoang `84.0%`
-
-Luu y quan trong:
-
-- `8,427` la `flag rows`, khong phai `unique orders`
-- mot order co the trung nhieu `reason_code`, vi vay can tach ro `flag rows` va `flagged_orders`
-
-## 1. Don vi scoring chinh
-
-Don vi scoring trung tam la pair:
+Đơn vị scoring trung tâm là `pair`:
 
 - `driver_id`
 - `customer_id`
 
-Ly do:
+Lý do:
 
-- collusion trong bai toan nay xuat hien tren quan he lap lai giua hai dau mut
-- scoring o cap order rat de bi nhieu va kho nhin ra pattern lap
-- pair scoring cho phep gan network context de mo case dieu tra
+- bài toán gian lận này thể hiện ở mối quan hệ lặp lại giữa hai bên
+- nếu chấm điểm thẳng ở cấp order, rất dễ nhiều noise và khó thấy mẫu lặp
+- pair scoring giúp gom các chuyến xe rời rạc thành một câu chuyện để điều tra
 
-## 2. Graph core scoring
+Cách nói ngắn gọn cho non-tech:
 
-## 2.1. Pair core score
+- hệ thống không hỏi "order này có gian lận không?"
+- hệ thống hỏi "cặp tài xế - khách hàng này có hành vi bất thường không?"
 
-`pair_core_score` nen duoc xay tu 2 thanh phan bat buoc:
+## 2. 3 lớp điểm trong luồng mới
+
+### 2.1. `pair_core_score`
+
+Đây là điểm quan trọng nhất.
+
+Nó trả lời:
+
+- nếu chỉ nhìn riêng cặp này, cặp có bất thường không?
+
+Trong luồng hiện tại, điểm này được xây chủ yếu từ:
 
 - `volume_score`
 - `concentration_score`
 
-Y nghia:
+Có thể hiểu đơn giản:
 
-- `volume_score` tra loi pair co lap lai bat thuong hay khong
-- `concentration_score` tra loi pair co dang "dinh" vao nhau bat thuong hay khong
+- `volume_score`: cặp này lặp lại nhiều hơn bình thường hay không
+- `concentration_score`: hai bên có "dính" vào nhau quá mức bình thường hay không
 
-Tai lieu huong moi khuyen nghi uu tien 2 diem nay truoc moi signal khac.
+### 2.2. `network_support_score`
 
-## 2.2. Suspicious pair rule
+Đây là điểm bổ sung.
 
-Mot pair nen duoc dua vao suspicious list neu:
+  Trả lời:
 
-- du `min_pair_trips`
-- va co bang chung repeated-pair manh hoac ghost signal manh
+- cặp này có nằm trong một cụm đáng nghi rộng hơn hay không?
 
-Mac dinh implementation hien tai uu tien:
+Sau khi có danh sách suspicious pair, hệ thống mới build suspicious graph và chạy `WCC`.
 
-- `n_trips >= 4`
-- va mot trong hai nhom sau:
-  - repeated-pair manh:
-    - `is_extreme_volume = True`
-    - va `pair_share_driver >= 0.4` hoac `pair_share_customer >= 0.6`
-    - va `concentration_score >= 0.85` hoac `pair_core_score >= 50`
-  - ghost signal manh:
-    - `ghost_rate >= 0.5`
-
-Neu can mot ban MVP de trien khai nhanh, co the dung rule don gian:
-
-- `trip_count` nam o tail cua phan phoi
-- va `pair_share_driver` hoac `pair_share_customer` vuot nguong
-
-## 2.3. Network support score
-
-Sau khi co suspicious pair list, build suspicious graph va chay `WCC`.
-
-Tu do sinh cac metric ho tro:
+Từ đó mới có các thông tin như:
 
 - `component_id`
 - `component_size`
 - `linked_pair_count`
-- so loai shared entities ho tro
+- số loại shared entities hỗ trợ
 
-Nhung metric nay nen duoc tong hop thanh:
+Cần giữ cách hiểu nhất quán:
 
-- `network_support_score`
+- network support giúp mở rộng điều tra
+- network support không thay thế pair evidence
 
-Day khong phai first-pass detector. No la lop bo sung de biet:
+### 2.3. `priority_score`
 
-- pair do dung mot minh
-- hay nam trong cum co ha tang dung chung
+Đây là điểm cuối cùng để sắp thứ tự review.
 
-## 3. Diem cuoi cung nen duoc dinh nghia the nao
+  Trả lời:
 
-Thay vi tron qua nhieu logic ngay tu dau, nen tach ro:
+- case nào nên được mở ra xem trước?
 
-- `pair_core_score`
-- `network_support_score`
-- `priority_score`
+Nếu giải thích bằng ngôn ngữ business:
 
-Trong do:
+- `pair_core_score` = mức độ đáng nghi của cặp
+- `network_support_score` = mức độ có được bối cảnh xung quanh củng cố hay không
+- `priority_score` = thứ tự cần xem trước trên dashboard
 
-- `pair_core_score` la diem chinh de quyet dinh pair co dang review hay khong
-- `network_support_score` la diem nang uu tien dieu tra
-- `priority_score` la diem sap hang cuoi cung cho analyst
+## 3. Pair nào mới được đưa vào shortlist
 
-Nguyen tac:
+Trong logic hiện tại, một pair được shortlist khi:
 
-- khong de network support thay the pair evidence
-- khong de enrichment lam mo 2 signal cot loi
-- pair co evidence manh phai van noi bat ke ca khi component nho
+- đạt mức tối thiểu về số chuyến
+- và có repeated-pair evidence mạnh hoặc ghost signal mạnh
 
-## 4. Cac signal enrichment nen dat dung vi tri
+Mặc định implementation hiện tại ưu tiên:
 
-Trong huong moi, cac signal sau van nen duoc giu, nhung dung o vai tro enrichment:
+- `n_trips >= 4`
+- và một trong hai nhóm sau:
+  - repeated-pair mạnh:
+    - `is_extreme_volume = True`
+    - `pair_share_driver >= 0.4` hoặc `pair_share_customer >= 0.6`
+    - `concentration_score >= 0.85` hoặc `pair_core_score >= 50`
+  - ghost signal mạnh:
+    - `ghost_rate >= 0.5`
+
+Điều quan trọng ở đây:
+
+- pair phải có lý do đáng nghi từ thân trước
+- hệ thống không nên đưa một pair vào shortlist chỉ vì nó đứng trong một cụm
+
+## 4. Các signal enrichment đang đóng vai trò gì
+
+Trong luồng mới, các signal sau vẫn rất hữu ích:
 
 - `ghost_rate`
 - `min_gap_min`
 - `dominant_route_share`
 - route template reuse
 
-Nen dung chung de:
+Vai trò của chúng đã rõ ràng hơn:
 
-- tang precision
-- tang explainability cho analyst
-- uu tien review trong cung mot component
+- tăng precision
+- tăng explainability
+- giúp ưu tiên review trong cùng một cụm
 
-Khong nen de chung tro thanh trung tam kien truc scoring.
+Không nên coi là trung tâm kiến trúc scoring.
 
 Operational note:
 
-- `ghost_rate` van la enrichment quan trong, nhung o implementation hien tai no cung co the dua pair vao shortlist khi du manh
-- dieu nay duoc chap nhan vi bai toan dang la `ghost-trip collusion`, nhung pair evidence van phai duoc uu tien trong explainability
+- `ghost_rate` vẫn đủ mạnh để đưa pair vào shortlist trong một số trường hợp
+- điều này phù hợp vì bài toán đang là `ghost-trip collusion`
+- tuy nhiên, trong cách giải thích cho business, pair evidence vẫn phải là nền
 
-## 5. Risk tier va flagging
+## 5. Risk tier và flagging cần được đọc ra sao
 
-`risk_tier` nen phan anh muc do uu tien review, khong phai ket luan fraud.
+`risk_tier` là nhãn ưu tiên review, không phải kết luận fraud.
 
-Goi y phan lop:
-
-- `HIGH`: pair core score cao va co them network support hoac enrichment manh
-- `MEDIUM`: pair core score ro rang nhung network support vua phai
-- `WATCHLIST`: pair duoc shortlist nhung can them bang chung
-
-Trong implementation hien tai, `risk_tier` order-level dang duoc materialize thanh:
+Trong implementation hiện tại, order-level output đang dùng các mức:
 
 - `IMMEDIATE_REVIEW`
 - `HIGH_RISK`
 - `MONITOR`
 - `LOW_PRIORITY`
 
-Trong do:
+Nên diễn giải như sau:
 
-- `high_confidence` khong con duoc bat chi vi mot `gap` nho don le
-- `SUPERFAST_GAP` chi hop le khi gap khong am, du so trip, va co ghost support toi thieu
+- `IMMEDIATE_REVIEW`: case nên mở ra xem ngay
+- `HIGH_RISK`: đáng nghi rõ, nhưng có thể cân đối chiều thêm
+- `MONITOR`: cần theo dõi tiếp
+- `LOW_PRIORITY`: chưa cần xử lý trước
 
-Co the giu dau ra cap order vi analyst thuong review tren order timeline, nhung can hieu:
+Lưu ý thêm:
 
-- phat hien o cap pair
-- clustering o cap network
-- materialization o cap order
+- `high_confidence` không còn được bắt chỉ vì một gap nhỏ đơn lẻ
+- `SUPERFAST_GAP` chỉ hợp lệ khi gap không âm, đủ số trip, và có ghost support tối thiểu
 
-## 6. Output nen duoc duy tri
+## 6. Output nào mới là output cần đọc
 
-Ve mat concept, mot pipeline scoring/flagging theo huong moi nen co toi thieu:
+Về mặt nghiệp vụ, pipeline hiện tại cần ít nhất 3 output chính:
 
 - `pair_summary`
 - `pair_reasons`
 - `flagged_orders`
 
-Trong do:
+Y nghĩa:
 
-- `pair_summary` la bang trung tam de cham diem va rank
-- `pair_reasons` giai thich tai sao pair bi shortlist
-- `flagged_orders` phuc vu review van hanh
+- `pair_summary`: bảng trung tâm để chấm điểm và rank
+- `pair_reasons`: nơi giải thích tại sao pair bị đưa vào shortlist
+- `flagged_orders`: danh sách order để đội vận hành mở ra xem
 
-Trong implementation dashboard hien tai, chi 3 file core duoc materialize va doc truc tiep:
+Trong implementation hiện tại, dashboard đọc trực tiếp:
 
 - `flagged_orders.parquet`
 - `kbc_pair_summary.csv`
 - `kbc_pair_reasons.csv`
 
-Thong tin `component` van duoc giu trong cac file core va duoc dashboard suy ra tu do, nen khong can materialize them mot file report rieng chi de phuc vu dashboard.
+Nếu cần giải thích ngắn gọn cho người mới:
 
-## 7. Cach doc score cho dung
+- muốn hiểu tại sao hệ thống flag, xem `pair_reasons`
+- muốn xem case nào quan trọng nhất, xem `pair_summary`
+- muốn đối chiếu nghiệp vụ, xem `flagged_orders`
 
-Nen dien giai nhu sau:
+## 7. Cách đọc KPI cho đúng
 
-- `pair_core_score`: muc do bat thuong cua chinh pair
-- `network_support_score`: muc do duoc cung co boi network xung quanh
-- `priority_score`: muc do nen review truoc
+Đây là điểm rất dễ bị hiểu sai.
 
-Day la ngon ngu scoring phu hop hon voi huong graph-first moi so voi viec tron nhieu score lich su vao mot nhan chung.
+Cần tách rõ:
 
-## 8. Final recommendation
+- `flag rows`
+- `unique flagged orders`
 
-Neu update pipeline scoring/flagging theo huong moi, thu tu uu tien nen la:
+Vì:
 
-1. chot pair table
-2. chot `volume_score`
-3. chot `concentration_score`
-4. chot suspicious pair rule
-5. build suspicious graph
-6. chot `WCC`
-7. moi them enrichment va risk tier
+- một order có thể trùng nhiều `reason_code`
+- một order có thể xuất hiện nhiều dòng trong bảng flag
 
-Lam nhu vay se giu scoring gon, de explain, va dung trong tam cua bai toan `Driver-Customer Ghost-Trip Collusion`.
+Vì vậy:
+
+- `flag rows` phản ánh số dòng bảng cảnh báo
+- `unique flagged orders` mới phản ánh số order duy nhất bị đưa ra review
+
+## 8. Thứ tự ưu tiên để giải thích với business
+
+Nếu cần trình bày cho đội non-tech, nên đi theo thứ tự:
+
+1. Hệ thống tìm cặp đáng nghi, không tìm từng order riêng lẻ
+2. Hệ thống chấm điểm mức độ bất thường của cặp đó
+3. Hệ thống xem cặp đó có nằm trong cụm đáng nghi không
+4. Hệ thống đưa các order liên quan ra để con người kiểm tra
+
+Thứ tự này dễ hiểu hơn và đúng với luồng mới hơn cách nói theo tên thuật toán.
+
+## 9. Final recommendation
+
+Mọi tài liệu và dashboard note liên quan đến `ride` nên đồng bộ 4 thông điệp:
+
+- pair là đơn vị phát hiện
+- network là bằng chứng hỗ trợ
+- order là cấp materialize để review
+- score dùng để xếp thứ tự review, không phải kết luận fraud
+
+

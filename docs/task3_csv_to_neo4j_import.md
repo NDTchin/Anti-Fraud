@@ -2,24 +2,24 @@
 
 ## Purpose
 
-Tai lieu nay mo ta luong import `ride` vao Neo4j trong boi canh project duoc dinh huong lai theo bai toan:
+Tài liệu này mô tả luồng import `ride` vào Neo4j trong bối cảnh project được định hướng lại theo bài toán:
 
 - `Driver-Customer Ghost-Trip Collusion`
 
-Tai lieu nay khong chi mo ta cach nap du lieu, ma con chi ro importer can phuc vu nhung gi cho `graph core` moi.
+Tài liệu này không chỉ mô tả cách nạp dữ liệu, mà còn chỉ rõ importer cần phục vụ những gì cho `graph core` mới.
 
 ## Graph-core view of the data
 
-Huong moi cua project xem pair `driver-customer` la don vi phan tich trung tam.
+Hướng mới của project xem pair `driver-customer` là đơn vị phân tích trung tâm.
 
-Vi vay, importer can dam bao graph order-level co du cac lien ket de downstream co the tong hop thanh:
+Vì vậy, importer cần đảm bảo graph order-level có đủ các liên kết để downstream có thể tổng hợp thành:
 
 - `trip_count` theo pair
 - `driver_trip_count`
 - `customer_trip_count`
-- cac shared entities de build suspicious graph
+- các shared entities để build suspicious graph
 
-Nhap du lieu vao Neo4j van o cap `Order`, nhung muc tieu nghiep vu cuoi cung la suy ra:
+Nhập dữ liệu vào Neo4j vẫn ở cấp `Order`, nhưng mục tiêu nghiệp vụ cuối cùng là suy ra:
 
 - weighted edge giua `Driver` va `Customer`
 - shared infrastructure xung quanh pair nghi ngo
@@ -55,9 +55,9 @@ Aggregate downstream into pair graph and suspicious graph
 
 ## Import behavior
 
-Moi batch se:
+Mỗi batch sẽ:
 
-- bo qua record khong co `order_id`
+- bỏ qua record không có `order_id`
 - `MERGE` `Order` theo `order_id`
 - `MERGE` `Customer`
 - `MERGE` `Driver`
@@ -66,7 +66,7 @@ Moi batch se:
 - `MERGE` `PromotionCode`
 - `MERGE` `PromotionCampaign`
 
-Va tao cac quan he can thiet nhu:
+Và tạo các quan hệ cần thiết như:
 
 - `PLACED`
 - `SERVED`
@@ -85,37 +85,37 @@ Va tao cac quan he can thiet nhu:
 
 ## Why this importer still matters in the new direction
 
-Mac du graph core moi phan tich o cap pair, importer order-level van can thiet vi no cung cap:
+Mặc dù graph core mới phân tích ở cấp pair, importer order-level vẫn cần thiết vì nó cung cấp:
 
-- quan he `Customer -> Order`
-- quan he `Driver -> Order`
+- quan hệ `Customer -> Order`
+- quan hệ `Driver -> Order`
 - pickup/dropoff addresses
-- payment va promo reuse
-- service taxonomy de filter phan tich
+- payment và promo reuse
+- service taxonomy để filter phân tích
 
-Day la nen du lieu de build 2 lop graph:
+Đây là nền dữ liệu để build 2 lớp graph:
 
 1. `pair graph`
 2. `suspicious graph`
 
 ## Minimum data requirements for the new graph core
 
-De phuc vu huong moi, importer va nguon cleaned data nen dam bao co toi thieu:
+Để phục vụ hướng mới, importer và nguồn cleaned data nên đảm bảo có tối thiểu:
 
 - `order_id`
 - `driver_id`
 - `customer_id`
 - `order_time_local_tz`
-- trang thai de xac dinh order hop le cho phan tich trip
+- trạng thái để xác định order hợp lệ cho phân tích trip
 
-De phuc vu suspicious graph va WCC, nen co them:
+Để phục vụ suspicious graph và WCC, nên có thêm:
 
 - pickup address
 - dropoff address
 - payment method
 - promotion code
 
-De phuc vu enrichment sau nay, co the co them:
+Để phục vụ enrichment sau này, có thể có thêm:
 
 - `avg_kmh`
 - route-related fields
@@ -123,15 +123,15 @@ De phuc vu enrichment sau nay, co the co them:
 
 ## Recommended downstream aggregation after import
 
-Sau khi import vao Neo4j, downstream khong nen dung lai o order graph.
+Sau khi import vào Neo4j, downstream không nên dừng lại ở order graph.
 
-Can co mot buoc aggregate de tao:
+Cần có một bước aggregate để tạo:
 
 1. `pair table`
 2. `suspicious pair list`
-3. `suspicious graph` noi bang shared entities
+3. `suspicious graph` nối bằng shared entities
 
-Tuong ung voi huong graph core:
+Tuơng ứng với hướng graph core:
 
 - `weighted edge outlier detection`
 - `bipartite concentration scoring`
@@ -139,7 +139,7 @@ Tuong ung voi huong graph core:
 
 ## Quality counters
 
-Script hien ghi nhan cac chi so:
+Script hiện ghi nhận các chỉ số:
 
 - `missing_order_id`
 - `missing_customer_id`
@@ -148,10 +148,10 @@ Script hien ghi nhan cac chi so:
 - `new_orders`
 - `updated_orders`
 
-Trong huong moi, cac check nay van dung, nhung ve nghiep vu fraud thi can hieu:
+Trong hướng mới, các check này vẫn đúng, nhưng về nghiệp vụ fraud thì cần hiểu:
 
-- thieu `driver_id` hoac `customer_id` se anh huong truc tiep den kha nang build pair graph
-- thieu `payment` hoac `address` se lam yeu suspicious graph
+- thiếu `driver_id` hoặc `customer_id` sẽ ảnh hưởng trực tiếp đến khả năng build pair graph
+- thiếu `payment` hoặc `address` sẽ làm yếu suspicious graph
 
 ## Example
 
@@ -165,10 +165,10 @@ python -m scripts.import_ride_daily_to_neo4j `
 
 ## Final note
 
-Importer nay nen duoc xem la lop ha tang du lieu cho huong graph moi, khong phai ban than bo detector.
+Importer này nên được xem là lớp hạ tầng dữ liệu cho hướng graph mới, không phải bản thân bộ detector.
 
-Gia tri cua no trong project duoc reset scope la:
+Gia trị của nó trong project được reset scope là:
 
-- luu order graph sach va nhat quan
-- bao ton cac shared entities quan trong
-- cho phep aggregate len pair graph va suspicious graph mot cach on dinh
+- lưu order graph sạch và nhất quán
+- bảo tồn các shared entities quan trọng
+- cho phép aggregate lên pair graph và suspicious graph một cách ổn định
