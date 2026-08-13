@@ -84,27 +84,21 @@ docker compose -f infra/docker-compose.full.yml up -d neo4j
 
 Import cleaned ride orders:
 
-```powershell
-.\scripts\run_ride_import.ps1 -Source data\handoff\ride\cleaned_orders\orders_ride_masked_2026-07-2[4-9].parquet
-```
 
-Hoac goi script truc tiep:
-
-```powershell
-python -m scripts.import_ride_daily_to_neo4j `
-  --source data\handoff\ride\cleaned_orders\orders_ride_masked_2026-07-2[4-9].parquet `
-  --batch-size 2000
 ```
+python -m scripts.import_ride_daily_to_neo4j --source data\handoff\ride\cleaned_orders\orders_ride_masked_2026-07-29.parquet
+Hoac chay truc tiep bang Python trong `venv`:
+
 
 ## Build daily outputs
 
 Daily outputs la bo file de dashboard doc truc tiep.
 
-```powershell
-python -m scripts.build_task3_daily_outputs `
+Chay scoring va build output bang Python trong `venv`:
+
+.\.venv\Scripts\python.exe -m scripts.build_task3_daily_outputs `
   --input data\handoff\ride\cleaned_orders\orders_ride_masked_2026-07-2[4-9].parquet `
-  --report-dir reports/task3
-```
+  --report-dir reports\task3
 
 Cac output chinh:
 
