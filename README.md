@@ -86,7 +86,7 @@ Import cleaned ride orders:
 
 
 ```
-python -m scripts.import_ride_daily_to_neo4j --source data\handoff\ride\cleaned_orders\orders_ride_masked_2026-07-29.parquet
+python -m scripts.import_neo4j_demo_graph --orders-input data\handoff\ride\cleaned_orders\orders_ride_masked_2026-07-2.parquet --cypher src\graph\cypher\002_demo_visualization_constraints.cypher --wipe-existing --confirm-wipe DELETE_ALL_DATA
 Hoac chay truc tiep bang Python trong `venv`:
 
 

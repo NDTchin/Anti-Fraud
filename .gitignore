@@ -15,6 +15,7 @@ data/samples/*
 !data/samples/.gitkeep
 data/handoff/
 data/neo4j-investigation-store/*
+data/neo4j-store/
 logs/
 tmp_sql_test_*.db
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from html import escape
 from pathlib import Path
 
 import pandas as pd
@@ -13,6 +14,8 @@ REPORT_DIR = Path("reports/task3")
 ALL_OPTION = "__all__"
 EXECUTIVE_CARD_HEIGHT = 360
 EXECUTIVE_CHART_MARGIN = dict(l=24, r=16, t=56, b=48)
+TABLE_HEIGHT = 360
+BLUE_SCALE = ["#2563EB", "#3B82F6", "#60A5FA", "#93C5FD", "#BFDBFE"]
 
 GRANULARITY_CONFIG = {
     "Ngày": "order_day",
@@ -42,8 +45,8 @@ SUPPORTING_SIGNAL_VI = {
 }
 
 DETAIL_COLUMN_LABELS = {
-    "order_id": "Mã đơn hàng",
-    "order_date": "Ngày đơn hàng",
+    "order_id": "Mã đơn",
+    "complete_time_local_tz": "Ngày hoàn thành",
     "driver_id": "Mã tài xế",
     "customer_id": "Mã khách hàng",
     "service_name": "Dịch vụ",
@@ -72,6 +75,410 @@ PAIR_COLUMN_LABELS = {
     "n_trips": "Số chuyến",
     "component_id": "Mã nhóm rủi ro",
 }
+
+
+def _inject_dashboard_theme() -> None:
+    st.markdown(
+        """
+        <style>
+        :root {
+            --bg-app: #F7F8FA;
+            --card-bg: #FFFFFF;
+            --card-border: #E5E7EB;
+            --text-primary: #1F2937;
+            --text-secondary: #4B5563;
+            --text-muted: #6B7280;
+            --primary: #2563EB;
+            --primary-soft: #3B82F6;
+            --primary-light: #EFF6FF;
+            --cyan: #12B5CB;
+            --purple: #8B5CF6;
+            --orange: #F59E0B;
+            --shadow-soft: 0 1px 3px rgba(15, 23, 42, 0.04);
+        }
+
+        .stApp {
+            background: var(--bg-app);
+        }
+
+        .block-container {
+            max-width: 1440px;
+            padding-top: 1rem;
+            padding-bottom: 2.25rem;
+        }
+
+        h1, h2, h3 {
+            color: var(--text-primary);
+            letter-spacing: -0.03em;
+        }
+
+        [data-testid="stVerticalBlockBorderWrapper"] {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 18px;
+            box-shadow: var(--shadow-soft);
+            padding: 0.25rem;
+        }
+
+        [data-testid="stMetric"] {
+            background: transparent;
+            border: none;
+            padding: 0;
+        }
+
+        .dashboard-stat-card,
+        .dashboard-insight-card,
+        .dashboard-rule-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 18px;
+            box-shadow: var(--shadow-soft);
+        }
+
+        .dashboard-stat-card {
+            padding: 20px 20px 18px;
+            min-height: 132px;
+        }
+
+        .dashboard-insight-card {
+            padding: 16px 20px 18px;
+            min-height: 196px;
+        }
+
+        .dashboard-rule-card {
+            padding: 18px 20px;
+            margin-bottom: 12px;
+        }
+
+        .stat-top,
+        .insight-top,
+        .rule-top {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .icon-badge {
+            width: 46px;
+            height: 46px;
+            border-radius: 16px;
+            background: linear-gradient(180deg, #F8FBFF 0%, #ECF5FF 100%);
+            border: 1px solid #DCEBFF;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary);
+            font-size: 22px;
+            font-weight: 700;
+            flex: 0 0 auto;
+        }
+
+        .stat-title,
+        .insight-title,
+        .rule-title {
+            font-size: 14px;
+            line-height: 1.45;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .stat-value,
+        .insight-value {
+            margin-top: 14px;
+            color: var(--text-primary);
+            font-size: 18px;
+            line-height: 1.25;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            line-height: 1.15;
+        }
+
+        .stat-subtitle,
+        .insight-detail,
+        .rule-detail {
+            margin-top: 8px;
+            color: var(--text-muted);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .insight-detail {
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            min-height: 58px;
+        }
+
+        .insight-accent {
+            width: 44px;
+            height: 4px;
+            border-radius: 999px;
+            margin-bottom: 14px;
+        }
+
+        .rule-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.7fr) 160px 160px 22px;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .rule-metric-label {
+            color: var(--text-muted);
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
+        .rule-metric-value {
+            color: var(--primary);
+            font-size: 18px;
+            line-height: 1.1;
+            font-weight: 700;
+        }
+
+        .rule-chevron {
+            color: #94A3B8;
+            font-size: 24px;
+            text-align: right;
+        }
+
+        .hero-card .stRadio > div {
+            margin-top: 2px;
+        }
+
+        .stDateInput label,
+        .stSelectbox label,
+        .stRadio label {
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .stDateInput > div,
+        .stSelectbox > div > div {
+            background: #FFFFFF;
+            border-radius: 12px;
+        }
+
+        .hero-card [data-testid="stRadio"] > div {
+            gap: 0.75rem;
+        }
+
+        .hero-card [data-testid="stRadio"] label {
+            background: #FFFFFF;
+            border: 1px solid #DCE6F3;
+            border-radius: 999px;
+            padding: 8px 14px 8px 10px;
+            min-height: 40px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.15s ease;
+        }
+
+        .hero-card [data-testid="stRadio"] label:hover {
+            border-color: #BFD6FF;
+            background: #F8FBFF;
+        }
+
+        .hero-card [data-testid="stRadio"] label:has(input:checked) {
+            background: #EFF6FF;
+            border-color: #BFDBFE;
+            box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08);
+        }
+
+        .hero-card [data-testid="stRadio"] label p {
+            margin: 0;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .hero-card [data-testid="stRadio"] label:has(input:checked) p {
+            color: var(--primary);
+        }
+
+        .hero-card [data-testid="stRadio"] input {
+            accent-color: #2563EB;
+        }
+
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 2rem;
+            border-bottom: 1px solid var(--card-border);
+            padding-bottom: 0;
+        }
+
+        .stTabs [data-baseweb="tab"] {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            border-bottom: 2px solid transparent;
+            height: 44px;
+            border-radius: 0;
+            padding: 0;
+            font-weight: 600;
+        }
+
+        .stTabs [aria-selected="true"] {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+            background: transparent;
+        }
+
+        .stTabs [data-baseweb="tab"]:hover {
+            color: var(--primary);
+            background: transparent;
+        }
+
+        [data-testid="stDataFrame"] {
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .stCodeBlock {
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+        }
+
+        div[data-testid="column"] > div:has(.dashboard-stat-card),
+        div[data-testid="column"] > div:has(.dashboard-insight-card) {
+            height: 100%;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _format_period_value(value: object) -> str:
+    if pd.isna(value):
+        return ""
+    ts = pd.to_datetime(value, errors="coerce")
+    if pd.isna(ts):
+        return str(value)
+    return ts.strftime("%d/%m/%Y")
+
+
+def _prepare_table(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame.empty:
+        return frame
+    view = frame.copy()
+    for column in view.columns:
+        lowered = str(column).lower()
+        if "date" in lowered or "period" in lowered:
+            view[column] = view[column].apply(_format_period_value)
+    return view
+
+
+def _show_table(frame: pd.DataFrame, *, height: int = TABLE_HEIGHT) -> None:
+    st.dataframe(_prepare_table(frame), width="stretch", height=height, hide_index=True)
+
+
+def _style_plotly_chart(
+    fig,
+    *,
+    height: int | None = None,
+    xaxis_title: str | None = None,
+    yaxis_title: str | None = None,
+) -> None:
+    fig.update_layout(
+        height=height,
+        margin=EXECUTIVE_CHART_MARGIN,
+        paper_bgcolor="#FFFFFF",
+        plot_bgcolor="#FFFFFF",
+        hovermode="x unified",
+        hoverlabel=dict(bgcolor="#FFFFFF", bordercolor="#DBEAFE", font=dict(color="#1F2937")),
+        font=dict(color="#4B5563"),
+        title_font=dict(size=18, color="#1F2937"),
+        xaxis_title=xaxis_title,
+        yaxis_title=yaxis_title,
+    )
+    fig.update_xaxes(
+        showgrid=False,
+        zeroline=False,
+        linecolor="#E5E7EB",
+        tickfont=dict(color="#6B7280"),
+        title_font=dict(color="#6B7280"),
+    )
+    fig.update_yaxes(
+        showgrid=True,
+        gridcolor="#E5E7EB",
+        gridwidth=1,
+        zeroline=False,
+        tickfont=dict(color="#6B7280"),
+        title_font=dict(color="#6B7280"),
+    )
+
+
+def _render_stat_card(title: str, value: str, icon: str, subtitle: str = "") -> None:
+    st.markdown(
+        f"""
+        <div class="dashboard-stat-card">
+            <div class="stat-top">
+                <div class="icon-badge">{escape(icon)}</div>
+                <div class="stat-title">{escape(title)}</div>
+            </div>
+            <div class="stat-value">{escape(value)}</div>
+            <div class="stat-subtitle">{escape(subtitle)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_insight_card(title: str, value: str, detail: str, icon: str, accent: str) -> None:
+    st.markdown(
+        f"""
+        <div class="dashboard-insight-card">
+            <div class="insight-accent" style="background:{accent};"></div>
+            <div class="insight-top">
+                <div class="icon-badge">{escape(icon)}</div>
+                <div class="insight-title">{escape(title)}</div>
+            </div>
+            <div class="insight-value">{escape(value)}</div>
+            <div class="insight-detail">{escape(detail)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_rule_story_card(
+    title: str,
+    detail: str,
+    flagged_orders: str,
+    avg_priority: str,
+    icon: str,
+) -> None:
+    st.markdown(
+        f"""
+        <div class="dashboard-rule-card">
+            <div class="rule-grid">
+                <div class="rule-top">
+                    <div class="icon-badge">{escape(icon)}</div>
+                    <div>
+                        <div class="rule-title">{escape(title)}</div>
+                        <div class="rule-detail">{escape(detail)}</div>
+                    </div>
+                </div>
+                <div>
+                    <div class="rule-metric-label">Đơn bị flag</div>
+                    <div class="rule-metric-value">{escape(flagged_orders)}</div>
+                </div>
+                <div>
+                    <div class="rule-metric-label">Điểm ưu tiên TB</div>
+                    <div class="rule-metric-value">{escape(avg_priority)}</div>
+                </div>
+                <div class="rule-chevron">›</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 @st.cache_data(show_spinner=False)
@@ -137,13 +544,14 @@ def _render_filters(flags: pd.DataFrame) -> dict[str, object]:
     if "business_rule_label" in flags.columns:
         rule_options += sorted(flags["business_rule_label"].dropna().astype(str).unique().tolist())
 
-    col1, col2, col3, col4 = st.columns([1.2, 1, 1, 1.2])
+    col1, col2, col3, col4 = st.columns([1.15, 1, 1, 1])
     with col1:
         date_range = st.date_input(
             "Khoảng ngày",
             value=(min_date, max_date),
             min_value=min_date,
             max_value=max_date,
+            format="YYYY/MM/DD",
         )
     with col2:
         service_options = [ALL_OPTION] + sorted(flags["service_name"].dropna().astype(str).unique().tolist())
@@ -170,16 +578,7 @@ def _render_filters(flags: pd.DataFrame) -> dict[str, object]:
         )
 
     if isinstance(date_range, tuple):
-        if len(date_range) == 2 and not isinstance(date_range[0], tuple):
-            start_date, end_date = date_range
-        elif len(date_range) == 1:
-            single_value = date_range[0]
-            if isinstance(single_value, tuple) and len(single_value) == 2:
-                start_date, end_date = single_value
-            else:
-                start_date = end_date = single_value
-        else:
-            start_date = end_date = date_range[0]
+        start_date, end_date = date_range if len(date_range) == 2 else (date_range[0], date_range[0])
     else:
         start_date = end_date = date_range
 
@@ -198,14 +597,8 @@ def _apply_filters(
     reasons: pd.DataFrame,
     filters: dict[str, object],
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    start_date_raw = filters["start_date"]
-    end_date_raw = filters["end_date"]
-    if isinstance(start_date_raw, tuple):
-        start_date_raw = start_date_raw[0]
-    if isinstance(end_date_raw, tuple):
-        end_date_raw = end_date_raw[-1]
-    start_date = pd.Timestamp(start_date_raw).normalize()
-    end_date = pd.Timestamp(end_date_raw).normalize()
+    start_date = pd.Timestamp(filters["start_date"]).normalize()
+    end_date = pd.Timestamp(filters["end_date"]).normalize()
     service = str(filters["service"])
     risk_tier = str(filters["risk_tier"])
     selected_rule = str(filters["rule"])
@@ -264,9 +657,11 @@ def build_period_summary(flags: pd.DataFrame, period_col: str) -> pd.DataFrame:
         .rename("flagged_pairs")
         .reset_index()
     )
-    return summary.merge(pair_counts, on=period_col, how="left").rename(
-        columns={period_col: "period_start"}
-    ).sort_values("period_start")
+    return (
+        summary.merge(pair_counts, on=period_col, how="left")
+        .rename(columns={period_col: "period_start"})
+        .sort_values("period_start")
+    )
 
 
 def build_overview_metrics(flags: pd.DataFrame) -> dict[str, int]:
@@ -347,10 +742,12 @@ def build_component_summary(flags: pd.DataFrame) -> pd.DataFrame:
         .rename("flagged_pairs")
         .reset_index()
     )
-    return summary.merge(pair_counts, on="component_id", how="left").sort_values(
+    component_summary = summary.merge(pair_counts, on="component_id", how="left").sort_values(
         ["component_size", "max_priority_score", "flagged_orders"],
         ascending=[False, False, False],
-    )
+    ).reset_index(drop=True)
+    component_summary["component_display_id"] = [f"WCC-{index:03d}" for index in range(1, len(component_summary) + 1)]
+    return component_summary
 
 
 def build_pair_summary(pairs: pd.DataFrame) -> pd.DataFrame:
@@ -386,25 +783,37 @@ def build_insight_summary(
             "title": "Biến động gần nhất",
             "value": f"{delta:+,} đơn",
             "detail": f"{'Tăng' if delta >= 0 else 'Giảm'} so với kỳ trước",
+            "icon": "↗",
+            "accent": "#2563EB",
         }
     else:
         insights["trend"] = {
             "title": "Biến động gần nhất",
             "value": "Chưa đủ dữ liệu",
             "detail": "Cần ít nhất 2 kỳ để so sánh",
+            "icon": "↗",
+            "accent": "#2563EB",
         }
 
     if not flags.empty and "service_name" in flags.columns:
         top_service = (
-            flags.groupby("service_name")["order_id"].nunique().sort_values(ascending=False).reset_index()
-        ).iloc[0]
+            flags.groupby("service_name")["order_id"].nunique().sort_values(ascending=False).reset_index().iloc[0]
+        )
         insights["service"] = {
             "title": "Dịch vụ bị ảnh hưởng nhiều nhất",
             "value": str(top_service["service_name"]),
             "detail": f"{int(top_service['order_id']):,} đơn bị flag",
+            "icon": "◔",
+            "accent": "#12B5CB",
         }
     else:
-        insights["service"] = {"title": "Dịch vụ bị ảnh hưởng nhiều nhất", "value": "Không có dữ liệu", "detail": ""}
+        insights["service"] = {
+            "title": "Dịch vụ bị ảnh hưởng nhiều nhất",
+            "value": "Không có dữ liệu",
+            "detail": "",
+            "icon": "◔",
+            "accent": "#12B5CB",
+        }
 
     if not rules.empty:
         top_rule = rules.iloc[0]
@@ -412,9 +821,17 @@ def build_insight_summary(
             "title": "Rule nổi bật nhất",
             "value": str(top_rule["business_rule_label"]),
             "detail": str(top_rule["business_rule_story"]),
+            "icon": "⛨",
+            "accent": "#8B5CF6",
         }
     else:
-        insights["rule"] = {"title": "Rule nổi bật nhất", "value": "Không có dữ liệu", "detail": ""}
+        insights["rule"] = {
+            "title": "Rule nổi bật nhất",
+            "value": "Không có dữ liệu",
+            "detail": "",
+            "icon": "⛨",
+            "accent": "#8B5CF6",
+        }
 
     if not components.empty:
         top_component = components.sort_values(
@@ -423,15 +840,23 @@ def build_insight_summary(
         ).iloc[0]
         insights["component"] = {
             "title": "Nhóm WCC cần ưu tiên",
-            "value": str(top_component["component_id"]),
+            "value": str(top_component.get("component_display_id", top_component["component_id"])),
             "detail": (
-                f"Điểm ưu tiên {top_component['max_priority_score']:.2f} | "
-                f"kích thước {int(top_component['component_size'])} | "
+                f"Điểm ưu tiên {top_component['max_priority_score']:.2f}  |  "
+                f"kích thước {int(top_component['component_size'])}  |  "
                 f"{int(top_component['flagged_orders']):,} đơn"
             ),
+            "icon": "◎",
+            "accent": "#F59E0B",
         }
     else:
-        insights["component"] = {"title": "Nhóm WCC cần ưu tiên", "value": "Không có dữ liệu", "detail": ""}
+        insights["component"] = {
+            "title": "Nhóm WCC cần ưu tiên",
+            "value": "Không có dữ liệu",
+            "detail": "",
+            "icon": "◎",
+            "accent": "#F59E0B",
+        }
 
     return insights
 
@@ -443,37 +868,161 @@ def build_cypher_query_pack(row: pd.Series) -> dict[str, str]:
     business_rule = repr(str(row.get("business_rule_label", "")))
     component_id = repr(str(row.get("component_id", "")))
     return {
-        "Cặp tài xế - khách hàng bị flag theo rule": f"""MATCH (c:Customer {{customer_id: {customer_id}}})-[:PLACED]->(o:Order)<-[:SERVED]-(d:Driver {{driver_id: {driver_id}}})
-WHERE o.order_id = {order_id}
-RETURN c.customer_id AS customer_id,
-       d.driver_id AS driver_id,
-       o.order_id AS order_id,
-       {business_rule} AS fraud_rule,
-       o.order_time AS order_time
-LIMIT 50;""",
-        "Toàn bộ đơn của cặp đang chọn": f"""MATCH (c:Customer {{customer_id: {customer_id}}})-[:PLACED]->(o:Order)<-[:SERVED]-(d:Driver {{driver_id: {driver_id}}})
-OPTIONAL MATCH (o)-[:PICKUP_AT]->(pickup:Address)
-OPTIONAL MATCH (o)-[:DROPOFF_AT]->(drop:Address)
-RETURN c, d, o, pickup, drop
-ORDER BY o.order_time DESC
-LIMIT 200;""",
-        "Các cặp bị flag cùng nhóm WCC": f"""MATCH (d:Driver)-[:SERVED]->(o:Order)<-[:PLACED]-(c:Customer)
-WHERE o.order_id IN [
-  x IN [] WHERE x IS NOT NULL
-]
-RETURN d, c, o
-LIMIT 0; -- Thay khối này bằng danh sách order_id trong component {component_id}""",
-        "Timeline của tài xế đang chọn": f"""MATCH (d:Driver {{driver_id: {driver_id}}})-[:SERVED]->(o:Order)
-OPTIONAL MATCH (o)<-[:PLACED]-(c:Customer)
-RETURN d, o, c
-ORDER BY o.order_time DESC
-LIMIT 200;""",
-        "Chi tiết order đang chọn": f"""MATCH (o:Order {{order_id: {order_id}}})
-OPTIONAL MATCH (o)<-[:PLACED]-(c:Customer)
-OPTIONAL MATCH (o)<-[:SERVED]-(d:Driver)
-OPTIONAL MATCH (o)-[:PICKUP_AT]->(pickup:Address)
-OPTIONAL MATCH (o)-[:DROPOFF_AT]->(drop:Address)
-RETURN o, c, d, pickup, drop;""",
+        "Cặp tài xế - khách hàng bị gắn cờ": f"""// Visualize đúng cặp driver-customer đang bị gắn cờ.
+MATCH p_flagged_pair = (c_flagged:Customer {{customer_id: {customer_id}}})-[:PLACED]->(o_flagged:Order)<-[:SERVED]-(d_flagged:Driver {{driver_id: {driver_id}}})
+RETURN p_flagged_pair AS graph_path;""",
+        "Các tài xế liên quan tới customer bị gắn cờ": f"""// Visualize các tài xế khác từng phục vụ customer đang nằm trong cặp flagged.
+MATCH p_related_drivers = (c_flagged:Customer {{customer_id: {customer_id}}})-[:PLACED]->(o_related_driver:Order)<-[:SERVED]-(d_related:Driver)
+WHERE d_related.driver_id <> {driver_id}
+RETURN p_related_drivers AS graph_path;""",
+        "Các khách hàng liên quan tới driver bị gắn cờ": f"""// Visualize các khách hàng khác từng đi với driver đang nằm trong cặp flagged.
+MATCH p_related_customers = (d_flagged:Driver {{driver_id: {driver_id}}})-[:SERVED]->(o_related_customer:Order)<-[:PLACED]-(c_related:Customer)
+WHERE c_related.customer_id <> {customer_id}
+RETURN p_related_customers AS graph_path;""",
+        "2 tài xế bị flag và khách hàng chung/riêng": f"""// Mục tiêu: chỉ hiển thị 2 tài xế bị gắn flag và các khách hàng
+// chung / riêng của 2 tài xế đó, để Browser nhìn graph đơn giản hơn.
+// Driver 1 lấy từ case đang chọn. Hãy thay DRIVER_ID_2 bằng tài xế thứ hai bạn muốn so sánh.
+WITH {driver_id} AS driver_id_1, 'DRIVER_ID_2' AS driver_id_2
+MATCH (d1:Driver {{driver_id: driver_id_1}})
+MATCH (d2:Driver {{driver_id: driver_id_2}})
+MATCH p = (c:Customer)-[:PLACED]->(o:Order)
+          <-[:SERVED]-(d:Driver)
+WHERE d.driver_id IN [driver_id_1, driver_id_2]
+  AND EXISTS {{
+    MATCH (c)-[:PLACED]->(:Order)<-[:SERVED]-(:Driver {{driver_id: driver_id_1}})
+  }}
+  AND EXISTS {{
+    MATCH (c)-[:PLACED]->(:Order)<-[:SERVED]-(:Driver {{driver_id: driver_id_2}})
+  }}
+RETURN p AS graph_path
+UNION
+WITH {driver_id} AS driver_id_1, 'DRIVER_ID_2' AS driver_id_2
+MATCH p = (c:Customer)-[:PLACED]->(o:Order)<-[:SERVED]-(d:Driver {{driver_id: driver_id_1}})
+WHERE NOT EXISTS {{
+    MATCH (c)-[:PLACED]->(:Order)<-[:SERVED]-(:Driver {{driver_id: driver_id_2}})
+}}
+RETURN p AS graph_path
+UNION
+WITH {driver_id} AS driver_id_1, 'DRIVER_ID_2' AS driver_id_2
+MATCH p = (c:Customer)-[:PLACED]->(o:Order)<-[:SERVED]-(d:Driver {{driver_id: driver_id_2}})
+WHERE NOT EXISTS {{
+    MATCH (c)-[:PLACED]->(:Order)<-[:SERVED]-(:Driver {{driver_id: driver_id_1}})
+}}
+RETURN p AS graph_path;""",
+        "Khách hàng chung giữa driver flagged và driver liên quan": f"""// Visualize các customer giao cắt giữa driver flagged và những driver khác
+// cũng từng phục vụ customer của cặp flagged. Hữu ích để soi common cluster / WCC.
+MATCH (c_flagged:Customer {{customer_id: {customer_id}}})-[:PLACED]->(:Order)<-[:SERVED]-(d_related:Driver)
+WHERE d_related.driver_id <> {driver_id}
+MATCH p_shared_customers = (d_flagged:Driver {{driver_id: {driver_id}}})-[:SERVED]->(o_left:Order)<-[:PLACED]-(c_shared:Customer)-[:PLACED]->(o_right:Order)<-[:SERVED]-(d_related)
+WHERE c_shared.customer_id <> {customer_id}
+RETURN p_shared_customers AS graph_path;""",
+        "Case graph: đơn flagged và hạ tầng liên quan": f"""// Mục tiêu: mở case graph của đúng 1 order bị flag để analyst/investigator nhìn
+// ngay ai tham gia, order nằm ở service nào và đi qua hạ tầng nào.
+MATCH p_core = (c:Customer {{customer_id: {customer_id}}})-[:PLACED]->(o:Order {{order_id: {order_id}}})<-[:SERVED]-(d:Driver {{driver_id: {driver_id}}})
+RETURN p_core AS graph_path
+UNION
+MATCH p_pickup = (o:Order {{order_id: {order_id}}})-[:PICKUP_AT]->(:Address)
+RETURN p_pickup AS graph_path
+UNION
+MATCH p_dropoff = (o:Order {{order_id: {order_id}}})-[:DROPOFF_AT]->(:Address)
+RETURN p_dropoff AS graph_path
+UNION
+MATCH p_payment = (o:Order {{order_id: {order_id}}})-[:PAID_BY]->(:PaymentMethod)
+RETURN p_payment AS graph_path
+UNION
+MATCH p_promo = (o:Order {{order_id: {order_id}}})-[:USED_PROMO]->(:PromotionCode)
+RETURN p_promo AS graph_path
+UNION
+MATCH p_campaign = (o:Order {{order_id: {order_id}}})-[:USED_PROMO]->(:PromotionCode)-[:IN_CAMPAIGN]->(:PromotionCampaign)
+RETURN p_campaign AS graph_path
+UNION
+MATCH p_service = (o:Order {{order_id: {order_id}}})-[:USES_SERVICE]->(:RideService)
+RETURN p_service AS graph_path
+UNION
+MATCH p_cancel_actor = (o:Order {{order_id: {order_id}}})-[:CANCELLED_BY]->(:CancelActor)
+RETURN p_cancel_actor AS graph_path
+UNION
+MATCH p_cancel_reason = (o:Order {{order_id: {order_id}}})-[:HAS_CANCEL_REASON]->(:CancelReason)
+RETURN p_cancel_reason AS graph_path;""",
+        "Pair graph: toàn bộ lịch sử của cặp": f"""// Mục tiêu: visualize full order-history của 1 cặp driver-customer bị nghi ngờ,
+// để xem mật độ lặp lại, reuse hạ tầng và độ tập trung hành vi.
+MATCH p_core = (c:Customer {{customer_id: {customer_id}}})-[:PLACED]->(o:Order)<-[:SERVED]-(d:Driver {{driver_id: {driver_id}}})
+RETURN p_core AS graph_path
+UNION
+MATCH p_pickup = (c:Customer {{customer_id: {customer_id}}})-[:PLACED]->(o:Order)<-[:SERVED]-(d:Driver {{driver_id: {driver_id}}}),
+                 (o)-[:PICKUP_AT]->(:Address)
+RETURN p_pickup AS graph_path
+UNION
+MATCH p_dropoff = (c:Customer {{customer_id: {customer_id}}})-[:PLACED]->(o:Order)<-[:SERVED]-(d:Driver {{driver_id: {driver_id}}}),
+                  (o)-[:DROPOFF_AT]->(:Address)
+RETURN p_dropoff AS graph_path
+UNION
+MATCH p_payment = (c:Customer {{customer_id: {customer_id}}})-[:PLACED]->(o:Order)<-[:SERVED]-(d:Driver {{driver_id: {driver_id}}}),
+                  (o)-[:PAID_BY]->(:PaymentMethod)
+RETURN p_payment AS graph_path
+UNION
+MATCH p_promo = (c:Customer {{customer_id: {customer_id}}})-[:PLACED]->(o:Order)<-[:SERVED]-(d:Driver {{driver_id: {driver_id}}}),
+                (o)-[:USED_PROMO]->(:PromotionCode)
+RETURN p_promo AS graph_path
+;""",
+        "Shared infrastructure quanh cặp nghi ngờ": f"""// Mục tiêu: nhìn các order/actor khác reuse cùng pickup, dropoff, payment, promo
+// với cặp đang điều tra. Query này hữu ích để phát hiện fraud ring / farm / reuse infra.
+MATCH (:Customer {{customer_id: {customer_id}}})-[:PLACED]->(seed:Order)<-[:SERVED]-(:Driver {{driver_id: {driver_id}}})
+WITH collect(DISTINCT seed) AS seed_orders
+UNWIND seed_orders AS so
+MATCH p1 = (so)-[:PICKUP_AT]->(a:Address)<-[:PICKUP_AT]-(other_pickup:Order)<-[:PLACED]-(:Customer)
+WHERE other_pickup <> so
+RETURN p1 AS graph_path
+UNION
+MATCH (:Customer {{customer_id: {customer_id}}})-[:PLACED]->(seed:Order)<-[:SERVED]-(:Driver {{driver_id: {driver_id}}})
+WITH collect(DISTINCT seed) AS seed_orders
+UNWIND seed_orders AS so
+MATCH p2 = (so)-[:DROPOFF_AT]->(a:Address)<-[:DROPOFF_AT]-(other_dropoff:Order)<-[:PLACED]-(:Customer)
+WHERE other_dropoff <> so
+RETURN p2 AS graph_path
+UNION
+MATCH (:Customer {{customer_id: {customer_id}}})-[:PLACED]->(seed:Order)<-[:SERVED]-(:Driver {{driver_id: {driver_id}}})
+WITH collect(DISTINCT seed) AS seed_orders
+UNWIND seed_orders AS so
+MATCH p3 = (so)-[:PAID_BY]->(pm:PaymentMethod)<-[:PAID_BY]-(other_payment:Order)<-[:PLACED]-(:Customer)
+WHERE other_payment <> so
+RETURN p3 AS graph_path
+UNION
+MATCH (:Customer {{customer_id: {customer_id}}})-[:PLACED]->(seed:Order)<-[:SERVED]-(:Driver {{driver_id: {driver_id}}})
+WITH collect(DISTINCT seed) AS seed_orders
+UNWIND seed_orders AS so
+MATCH p4 = (so)-[:USED_PROMO]->(promo:PromotionCode)<-[:USED_PROMO]-(other_promo:Order)<-[:PLACED]-(:Customer)
+WHERE other_promo <> so
+RETURN p4 AS graph_path;""",
+        "Lân cận của tài xế đang chọn": f"""// Mục tiêu: xem tài xế này kết nối với những customer/order nào khác,
+// để đánh giá mức độ tập trung bất thường quanh cùng một customer hay một cụm customer nhỏ.
+MATCH p = (d:Driver {{driver_id: {driver_id}}})-[:SERVED]->(o:Order)<-[:PLACED]-(c:Customer)
+RETURN p AS graph_path
+UNION
+MATCH p = (d:Driver {{driver_id: {driver_id}}})-[:SERVED]->(o:Order)-[:USES_SERVICE]->(:RideService)
+RETURN p AS graph_path
+UNION
+MATCH p = (d:Driver {{driver_id: {driver_id}}})-[:SERVED]->(o:Order)-[:PICKUP_AT]->(:Address)
+RETURN p AS graph_path
+UNION
+MATCH p = (d:Driver {{driver_id: {driver_id}}})-[:SERVED]->(o:Order)-[:DROPOFF_AT]->(:Address)
+RETURN p AS graph_path;""",
+        "Chi tiết order đang chọn": f"""// Mục tiêu: graph drill-down cho 1 order cụ thể, phù hợp lúc analyst muốn bấm sâu
+// vào một case và xác định đầy đủ context để xuất phát điều tra.
+MATCH p1 = (c:Customer)-[:PLACED]->(o:Order {{order_id: {order_id}}})<-[:SERVED]-(d:Driver)
+RETURN p1 AS graph_path
+UNION
+MATCH p2 = (o:Order {{order_id: {order_id}}})-[:PICKUP_AT]->(:Address)
+RETURN p2 AS graph_path
+UNION
+MATCH p3 = (o:Order {{order_id: {order_id}}})-[:DROPOFF_AT]->(:Address)
+RETURN p3 AS graph_path
+UNION
+MATCH p4 = (o:Order {{order_id: {order_id}}})-[:PAID_BY]->(:PaymentMethod)
+RETURN p4 AS graph_path
+UNION
+MATCH p5 = (o:Order {{order_id: {order_id}}})-[:USED_PROMO]->(:PromotionCode)
+RETURN p5 AS graph_path;""",
     }
 
 
@@ -481,58 +1030,104 @@ def build_component_cypher_query(component_flags: pd.DataFrame, component_id: st
     if component_flags.empty or "order_id" not in component_flags.columns:
         return f"// Không có order_id cho nhóm rủi ro {component_id}"
     order_ids = ", ".join(repr(str(order_id)) for order_id in component_flags["order_id"].dropna().astype(str).unique()[:200])
-    return f"""MATCH (d:Driver)-[:SERVED]->(o:Order)<-[:PLACED]-(c:Customer)
-WHERE o.order_id IN [{order_ids}]
-OPTIONAL MATCH (o)-[:PICKUP_AT]->(pickup:Address)
-OPTIONAL MATCH (o)-[:DROPOFF_AT]->(drop:Address)
-RETURN d, c, o, pickup, drop
-LIMIT 500; -- Component {component_id}"""
+    return f"""// Mục tiêu: mở toàn bộ graph của 1 WCC/component nghi ngờ để visualize cluster,
+// không chỉ xem order list. Query trả về core graph + shared infra bên trong component.
+WITH [{order_ids}] AS order_ids
+MATCH p_core = (c:Customer)-[:PLACED]->(o:Order)<-[:SERVED]-(d:Driver)
+WHERE o.order_id IN order_ids
+RETURN p_core AS graph_path
+UNION
+WITH [{order_ids}] AS order_ids
+MATCH p_pickup = (o1:Order)-[:PICKUP_AT]->(a:Address)<-[:PICKUP_AT]-(o2:Order)
+WHERE o1.order_id IN order_ids
+  AND o2.order_id IN order_ids
+  AND o1.order_id < o2.order_id
+RETURN p_pickup AS graph_path
+UNION
+WITH [{order_ids}] AS order_ids
+MATCH p_dropoff = (o1:Order)-[:DROPOFF_AT]->(a:Address)<-[:DROPOFF_AT]-(o2:Order)
+WHERE o1.order_id IN order_ids
+  AND o2.order_id IN order_ids
+  AND o1.order_id < o2.order_id
+RETURN p_dropoff AS graph_path
+UNION
+WITH [{order_ids}] AS order_ids
+MATCH p_payment = (o1:Order)-[:PAID_BY]->(pm:PaymentMethod)<-[:PAID_BY]-(o2:Order)
+WHERE o1.order_id IN order_ids
+  AND o2.order_id IN order_ids
+  AND o1.order_id < o2.order_id
+RETURN p_payment AS graph_path
+UNION
+WITH [{order_ids}] AS order_ids
+MATCH p_promo = (o1:Order)-[:USED_PROMO]->(promo:PromotionCode)<-[:USED_PROMO]-(o2:Order)
+WHERE o1.order_id IN order_ids
+  AND o2.order_id IN order_ids
+  AND o1.order_id < o2.order_id
+RETURN p_promo AS graph_path
+LIMIT 800; // Component {component_id}"""
+
+
+def _render_header_and_filters(flags: pd.DataFrame) -> dict[str, object]:
+    with st.container(border=True):
+        st.markdown('<div class="hero-card">', unsafe_allow_html=True)
+        st.title("Dashboard Fraud KB-C")
+        st.caption(
+            "Dashboard này được sắp theo 3 lớp sử dụng: người xem tổng quan, analyst cần phân tích sâu và investigator cần điều tra case."
+        )
+        filters = _render_filters(flags)
+        st.radio("Chu kỳ tổng hợp", options=list(GRANULARITY_CONFIG.keys()), horizontal=True, key="granularity_radio")
+        st.markdown("</div>", unsafe_allow_html=True)
+    return filters
 
 
 def _render_metric_cards(metrics: dict[str, int]) -> None:
-    col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Tổng đơn trong tập flagged", f"{metrics['total_orders_in_scope']:,}")
-    col2.metric("Đơn bị flag", f"{metrics['flagged_orders']:,}")
-    col3.metric("Tài xế bị flag", f"{metrics['flagged_drivers']:,}")
-    col4.metric("Khách hàng bị flag", f"{metrics['flagged_customers']:,}")
-    col5.metric("Nhóm WCC lớn nhất", f"{metrics['largest_component_size']:,}")
+    cards = [
+        ("Tổng đơn trong tập flagged", f"{metrics['total_orders_in_scope']:,}", "◫"),
+        ("Đơn bị flag", f"{metrics['flagged_orders']:,}", "⚑"),
+        ("Tài xế bị flag", f"{metrics['flagged_drivers']:,}", "◌"),
+        ("Khách hàng bị flag", f"{metrics['flagged_customers']:,}", "◍"),
+        ("Nhóm WCC lớn nhất", f"{metrics['largest_component_size']:,}", "◎"),
+    ]
+    cols = st.columns(5)
+    for col, card in zip(cols, cards):
+        with col:
+            _render_stat_card(card[0], card[1], card[2])
+    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
 
 def _render_insight_cards(insights: dict[str, dict[str, str]]) -> None:
     cols = st.columns(4)
-    keys = ["trend", "service", "rule", "component"]
-    for col, key in zip(cols, keys):
+    for col, key in zip(cols, ["trend", "service", "rule", "component"]):
         with col:
             data = insights[key]
-            with st.container(border=True):
-                st.markdown(f"**{data['title']}**")
-                st.markdown(f"### {data['value']}")
-                st.caption(data["detail"])
+            _render_insight_card(
+                title=data["title"],
+                value=data["value"],
+                detail=data["detail"],
+                icon=data["icon"],
+                accent=data["accent"],
+            )
 
 
 def _render_rule_story_overview(rules: pd.DataFrame) -> None:
-    st.markdown("### Câu chuyện của các rules")
-    st.caption(
-        "Khối này tổng hợp nhanh câu chuyện chung của các rule, "
-        "để người xem hiểu bức tranh tổng quan trước khi xuống các bảng chi tiết."
-    )
-    if rules.empty:
-        st.info("Không có dữ liệu rule fraud.")
-        return
+    with st.container(border=True):
+        st.markdown("### Câu chuyện của các rules")
+        st.caption(
+            "Khối này tổng hợp nhanh câu chuyện chung của các rule để người xem hiểu bức tranh tổng quan trước khi xuống bảng chi tiết."
+        )
+        if rules.empty:
+            st.info("Không có dữ liệu rule fraud.")
+            return
 
-    for _, row in rules.head(4).iterrows():
-        with st.container(border=True):
-            left, mid, right = st.columns([1.8, 1, 1])
-            with left:
-                st.markdown(f"**{row['business_rule_label']}**")
-                story = row.get("business_rule_story", "")
-                if isinstance(story, str) and story.strip():
-                    st.write(story)
-            with mid:
-                st.metric("Đơn bị flag", f"{int(row['flagged_orders']):,}")
-            with right:
-                avg_priority = float(row["avg_priority_score"]) if pd.notna(row["avg_priority_score"]) else 0.0
-                st.metric("Điểm ưu tiên TB", f"{avg_priority:.2f}")
+        icons = ["⛨", "◉", "∞", "⌂"]
+        for index, (_, row) in enumerate(rules.head(4).iterrows()):
+            _render_rule_story_card(
+                title=str(row["business_rule_label"]),
+                detail=str(row.get("business_rule_story", "")),
+                flagged_orders=f"{int(row['flagged_orders']):,}",
+                avg_priority=f"{float(row['avg_priority_score']):.2f}",
+                icon=icons[index % len(icons)],
+            )
 
 
 def _render_main_trend(
@@ -551,291 +1146,89 @@ def _render_main_trend(
         line_shape="spline",
         title=f"{metric_label} theo {granularity_label.lower()}",
     )
-    chart.update_traces(line=dict(width=4), marker=dict(size=8))
-    layout_options = {
-        "xaxis_title": None,
-        "yaxis_title": metric_label,
-        "hovermode": "x unified",
-        "plot_bgcolor": "rgba(0,0,0,0)",
-    }
-    if chart_height:
-        layout_options.update(height=chart_height, margin=EXECUTIVE_CHART_MARGIN)
-    chart.update_layout(**layout_options)
+    chart.update_traces(
+        line=dict(width=4, color="#2563EB"),
+        marker=dict(size=8, color="#2563EB", line=dict(width=2, color="#FFFFFF")),
+        fill="tozeroy",
+        fillcolor="rgba(37, 99, 235, 0.10)",
+    )
+    _style_plotly_chart(chart, height=chart_height, xaxis_title=None, yaxis_title=metric_label)
     st.plotly_chart(chart, width="stretch", key=chart_key)
 
 
 def _render_executive_tab(
     flags: pd.DataFrame,
     summary: pd.DataFrame,
-    rules: pd.DataFrame,
     components: pd.DataFrame,
     granularity_label: str,
 ) -> None:
     st.subheader("Bức tranh điều hành")
-    st.caption("Tab này dành cho người xem tổng quan: cần nhìn ngay xu hướng, dịch vụ chịu ảnh hưởng và rule nổi bật.")
+    st.caption("Tab này dành cho người xem tổng quan: có nhìn ngay xu hướng, dịch vụ chịu ảnh hưởng và nhóm WCC cần ưu tiên.")
 
-    left, right = st.columns([1.4, 1])
+    left, right = st.columns(2)
     with left:
-        _render_main_trend(summary, granularity_label, "Đơn bị flag", "executive_main_trend")
-    with right:
-        service_summary = (
-            flags.groupby("service_name", dropna=False)
-            .agg(flagged_orders=("order_id", "nunique"))
-            .reset_index()
-            .fillna({"service_name": "Không rõ"})
-            .sort_values("flagged_orders", ascending=False)
-            .head(10)
-        )
-        service_chart = px.bar(
-            service_summary.sort_values("flagged_orders", ascending=True),
-            x="flagged_orders",
-            y="service_name",
-            orientation="h",
-            title="Top dịch vụ theo số đơn bị flag",
-        )
-        service_chart.update_layout(xaxis_title=None, yaxis_title=None)
-        st.plotly_chart(service_chart, width="stretch", key="executive_service_chart")
-
-    left, right = st.columns([1, 1.2])
-    with left:
-        st.markdown("#### Tổng hợp theo kỳ")
-        st.dataframe(
-            summary.rename(
-                columns={
-                    "period_start": "Kỳ bắt đầu",
-                    "total_orders_in_scope": "Tổng đơn trong tập flagged",
-                    "flagged_orders": "Đơn bị flag",
-                    "flagged_drivers": "Tài xế bị flag",
-                    "flagged_customers": "Khách hàng bị flag",
-                    "flagged_pairs": "Cặp tài xế - khách hàng",
-                }
-            ),
-            width="stretch",
-            hide_index=True,
-        )
-    if False:
-        pass
-        if rules.empty:
-            st.info("Không có dữ liệu rule fraud.")
-        else:
-            top_rule_chart = px.bar(
-                rules.head(8).sort_values("flagged_orders", ascending=True),
-                x="flagged_orders",
-                y="business_rule_label",
-                orientation="h",
-                title="Top rule theo số đơn bị flag",
-            )
-            top_rule_chart.update_layout(xaxis_title=None, yaxis_title=None)
-            st.plotly_chart(top_rule_chart, width="stretch", key="executive_top_rule_chart")
-            storytelling_view = rules[
-                ["business_rule_label", "business_rule_story", "flagged_orders", "avg_priority_score"]
-            ].rename(
-                columns={
-                    "business_rule_label": "Tên rule",
-                    "business_rule_story": "Câu chuyện của rule",
-                    "flagged_orders": "Số đơn bị flag",
-                    "avg_priority_score": "Điểm ưu tiên trung bình",
-                }
-            )
-            st.dataframe(storytelling_view, width="stretch", hide_index=True)
-
-    if not components.empty:
-        st.markdown("#### Nhóm WCC nào cần ưu tiên?")
-        component_chart = px.bar(
-            components.head(10).sort_values("max_priority_score", ascending=True),
-            x="max_priority_score",
-            y="component_id",
-            orientation="h",
-            title="Top nhóm WCC theo điểm ưu tiên",
-            hover_data=["component_size", "flagged_orders", "top_service", "top_rule"],
-        )
-        component_chart.update_layout(xaxis_title=None, yaxis_title=None)
-        st.plotly_chart(component_chart, width="stretch", key="executive_component_chart")
-
-
-def _render_executive_tab_v2(
-    flags: pd.DataFrame,
-    summary: pd.DataFrame,
-    rules: pd.DataFrame,
-    components: pd.DataFrame,
-    granularity_label: str,
-) -> None:
-    st.subheader("Bức tranh điều hành")
-    st.caption("Tab này dành cho người xem tổng quan: cần nhìn ngay xu hướng, dịch vụ chịu ảnh hưởng và rule nổi bật.")
-
-    left, right = st.columns([1.4, 1])
-    with left:
-        _render_main_trend(summary, granularity_label, "Đơn bị flag", "executive_main_trend_v2")
-    with right:
-        service_summary = (
-            flags.groupby("service_name", dropna=False)
-            .agg(flagged_orders=("order_id", "nunique"))
-            .reset_index()
-            .fillna({"service_name": "Không rõ"})
-            .sort_values("flagged_orders", ascending=False)
-            .head(10)
-        )
-        service_chart = px.bar(
-            service_summary.sort_values("flagged_orders", ascending=True),
-            x="flagged_orders",
-            y="service_name",
-            orientation="h",
-            title="Top dịch vụ theo số đơn bị flag",
-        )
-        service_chart.update_layout(xaxis_title=None, yaxis_title=None)
-        st.plotly_chart(service_chart, width="stretch", key="executive_service_chart_v2")
-
-    left, right = st.columns([1, 1.2])
-    with left:
-        st.markdown("#### Tổng hợp theo kỳ")
-        st.dataframe(
-            summary.rename(
-                columns={
-                    "period_start": "Kỳ bắt đầu",
-                    "total_orders_in_scope": "Tổng đơn trong tập flagged",
-                    "flagged_orders": "Đơn bị flag",
-                    "flagged_drivers": "Tài xế bị flag",
-                    "flagged_customers": "Khách hàng bị flag",
-                    "flagged_pairs": "Cặp tài xế - khách hàng",
-                }
-            ),
-            width="stretch",
-            hide_index=True,
-        )
-    if False:
-        pass
-        if rules.empty:
-            st.info("Không có dữ liệu rule fraud.")
-        else:
-            top_rule_chart = px.bar(
-                rules.head(8).sort_values("flagged_orders", ascending=True),
-                x="flagged_orders",
-                y="business_rule_label",
-                orientation="h",
-                title="Top rule theo số đơn bị flag",
-            )
-            top_rule_chart.update_layout(xaxis_title=None, yaxis_title=None)
-            st.plotly_chart(top_rule_chart, width="stretch", key="executive_top_rule_chart_v2")
-
-    if not components.empty:
-        st.markdown("#### Nhóm WCC nào cần ưu tiên?")
-        component_chart = px.bar(
-            components.head(10).sort_values("max_priority_score", ascending=True),
-            x="max_priority_score",
-            y="component_id",
-            orientation="h",
-            title="Top nhóm WCC theo điểm ưu tiên",
-            hover_data=["component_size", "flagged_orders", "top_service", "top_rule"],
-        )
-        component_chart.update_layout(xaxis_title=None, yaxis_title=None)
-        st.plotly_chart(component_chart, width="stretch", key="executive_component_chart_v2")
-
-
-def _render_rule_story_overview_clean(rules: pd.DataFrame) -> None:
-    st.markdown("### Câu chuyện của các rules")
-    st.caption(
-        "Khối này tổng hợp nhanh câu chuyện chung của các rule, để người xem hiểu bức tranh tổng quan trước khi xuống các bảng chi tiết."
-    )
-    if rules.empty:
-        st.info("Không có dữ liệu rule fraud.")
-        return
-
-    for _, row in rules.head(4).iterrows():
         with st.container(border=True):
-            left, mid, right = st.columns([1.8, 1, 1])
-            with left:
-                st.markdown(f"**{row['business_rule_label']}**")
-                story = row.get("business_rule_story", "")
-                if isinstance(story, str) and story.strip():
-                    st.write(story)
-            with mid:
-                st.metric("Đơn bị flag", f"{int(row['flagged_orders']):,}")
-            with right:
-                avg_priority = float(row["avg_priority_score"]) if pd.notna(row["avg_priority_score"]) else 0.0
-                st.metric("Điểm ưu tiên TB", f"{avg_priority:.2f}")
-
-
-def _render_executive_tab_clean(
-    flags: pd.DataFrame,
-    summary: pd.DataFrame,
-    rules: pd.DataFrame,
-    components: pd.DataFrame,
-    granularity_label: str,
-) -> None:
-    st.subheader("Bức tranh điều hành")
-    st.caption("Tab này dành cho người xem tổng quan: cần nhìn ngay xu hướng, dịch vụ chịu ảnh hưởng và rule nổi bật.")
-
-    left, right = st.columns(2)
-    with left:
-        _render_main_trend(
-            summary,
-            granularity_label,
-            "Đơn bị flag",
-            "executive_main_trend_clean",
-            chart_height=EXECUTIVE_CARD_HEIGHT,
-        )
+            _render_main_trend(summary, granularity_label, "Đơn bị flag", "executive_main_trend", chart_height=EXECUTIVE_CARD_HEIGHT)
     with right:
-        service_summary = (
-            flags.groupby("service_name", dropna=False)
-            .agg(flagged_orders=("order_id", "nunique"))
-            .reset_index()
-            .fillna({"service_name": "Không rõ"})
-            .sort_values("flagged_orders", ascending=False)
-            .head(10)
-        )
-        service_chart = px.bar(
-            service_summary.sort_values("flagged_orders", ascending=True),
-            x="flagged_orders",
-            y="service_name",
-            orientation="h",
-            title="Top dịch vụ theo số đơn bị flag",
-        )
-        service_chart.update_layout(
-            xaxis_title=None,
-            yaxis_title=None,
-            height=EXECUTIVE_CARD_HEIGHT,
-            margin=EXECUTIVE_CHART_MARGIN,
-        )
-        st.plotly_chart(service_chart, width="stretch", key="executive_service_chart_clean")
-
-    left, right = st.columns(2)
-    with left:
-        st.markdown("#### Tổng hợp theo kỳ")
-        st.dataframe(
-            summary.rename(
-                columns={
-                    "period_start": "Kỳ bắt đầu",
-                    "total_orders_in_scope": "Tổng đơn trong tập flagged",
-                    "flagged_orders": "Đơn bị flag",
-                    "flagged_drivers": "Tài xế bị flag",
-                    "flagged_customers": "Khách hàng bị flag",
-                    "flagged_pairs": "Cặp tài xế - khách hàng",
-                }
-            ),
-            width="stretch",
-            height=EXECUTIVE_CARD_HEIGHT,
-            hide_index=True,
-        )
-    with right:
-        st.markdown("#### Nhóm WCC nào cần ưu tiên?")
-        if components.empty:
-            st.info("Không có dữ liệu nhóm WCC.")
-        else:
-            component_chart = px.bar(
-                components.head(10).sort_values("max_priority_score", ascending=False),
-                x="component_id",
-                y="max_priority_score",
-                title="Top nhóm WCC theo điểm ưu tiên",
-                hover_data=["component_size", "flagged_orders", "top_service", "top_rule"],
+        with st.container(border=True):
+            service_summary = (
+                flags.groupby("service_name", dropna=False)
+                .agg(flagged_orders=("order_id", "nunique"))
+                .reset_index()
+                .fillna({"service_name": "Không rõ"})
+                .sort_values("flagged_orders", ascending=False)
+                .head(10)
             )
-            component_chart.update_layout(
-                xaxis_title=None,
-                yaxis_title=None,
+            service_chart = px.bar(
+                service_summary.sort_values("flagged_orders", ascending=True),
+                x="flagged_orders",
+                y="service_name",
+                orientation="h",
+                title="Top dịch vụ theo số đơn bị flag",
+                color_discrete_sequence=["#3B82F6"],
+                text="flagged_orders",
+            )
+            service_chart.update_traces(textposition="outside")
+            _style_plotly_chart(service_chart, height=EXECUTIVE_CARD_HEIGHT, xaxis_title=None, yaxis_title=None)
+            st.plotly_chart(service_chart, width="stretch", key="executive_service_chart")
+
+    left, right = st.columns(2)
+    with left:
+        with st.container(border=True):
+            st.markdown("#### Tổng hợp theo kỳ")
+            _show_table(
+                summary.rename(
+                    columns={
+                        "period_start": "Kỳ bắt đầu",
+                        "total_orders_in_scope": "Tổng đơn trong tập flagged",
+                        "flagged_orders": "Đơn bị flag",
+                        "flagged_drivers": "Tài xế bị flag",
+                        "flagged_customers": "Khách hàng bị flag",
+                        "flagged_pairs": "Cặp tài xế - khách hàng",
+                    }
+                ),
                 height=EXECUTIVE_CARD_HEIGHT,
-                margin=EXECUTIVE_CHART_MARGIN,
             )
-            component_chart.update_xaxes(tickangle=-35)
-            st.plotly_chart(component_chart, width="stretch", key="executive_component_chart_clean")
+    with right:
+        with st.container(border=True):
+            st.markdown("#### Nhóm WCC nào cần ưu tiên?")
+            st.caption("Top nhóm WCC theo điểm ưu tiên")
+            if components.empty:
+                st.info("Không có dữ liệu nhóm WCC.")
+            else:
+                component_chart = px.bar(
+                    components.head(10).sort_values("max_priority_score", ascending=True),
+                    x="max_priority_score",
+                    y="component_display_id",
+                    orientation="h",
+                    title="Top nhóm WCC theo điểm ưu tiên",
+                    hover_data=["component_size", "flagged_orders", "top_service", "top_rule"],
+                    color_discrete_sequence=["#3B82F6"],
+                    text="max_priority_score",
+                )
+                component_chart.update_traces(texttemplate="%{text:.2f}", textposition="outside")
+                _style_plotly_chart(component_chart, height=EXECUTIVE_CARD_HEIGHT, xaxis_title=None, yaxis_title=None)
+                st.plotly_chart(component_chart, width="stretch", key="executive_component_chart")
 
 
 def _render_analyst_tab(
@@ -846,71 +1239,73 @@ def _render_analyst_tab(
     granularity_label: str,
 ) -> None:
     st.subheader("Phân tích chuyên sâu cho analyst")
-    st.caption("Tab này dành cho analyst: cần soi xu hướng, so sánh dịch vụ/rule và xem cặp đáng nghi nhất.")
+    st.caption("Tab này dành cho analyst: soi xu hướng, so sánh dịch vụ hoặc rule và xem cặp đáng nghi nhất.")
 
     metric_label = st.selectbox("Chỉ số phân tích xu hướng", options=list(METRIC_OPTIONS.keys()), index=0)
     left, right = st.columns([1.2, 1])
-
     with left:
-        _render_main_trend(summary, granularity_label, metric_label, f"analyst_trend_{metric_label}")
+        with st.container(border=True):
+            _render_main_trend(summary, granularity_label, metric_label, f"analyst_trend_{metric_label}")
 
     with right:
-        breakdown_dimension = st.selectbox(
-            "Nhìn theo chiều nào?",
-            options=[
-                ("Rule fraud", "business_rule_label"),
-                ("Dịch vụ", "service_name"),
-                ("Mức rủi ro", "risk_tier"),
-            ],
-            format_func=lambda item: item[0],
-        )
-        group_col = breakdown_dimension[1]
-        breakdown = (
-            flags.groupby(group_col, dropna=False)
-            .agg(flagged_orders=("order_id", "nunique"))
-            .reset_index()
-            .fillna({group_col: "Không rõ"})
-            .sort_values("flagged_orders", ascending=False)
-            .head(10)
-        )
-        chart = px.bar(
-            breakdown.sort_values("flagged_orders", ascending=True),
-            x="flagged_orders",
-            y=group_col,
-            orientation="h",
-            title=f"So sánh theo {breakdown_dimension[0].lower()}",
-        )
-        chart.update_layout(xaxis_title=None, yaxis_title=None)
-        st.plotly_chart(chart, width="stretch", key=f"analyst_breakdown_{group_col}")
+        with st.container(border=True):
+            breakdown_dimension = st.selectbox(
+                "Nhìn theo chiều nào?",
+                options=[
+                    ("Rule fraud", "business_rule_label"),
+                    ("Dịch vụ", "service_name"),
+                    ("Mức rủi ro", "risk_tier"),
+                ],
+                format_func=lambda item: item[0],
+            )
+            group_col = breakdown_dimension[1]
+            breakdown = (
+                flags.groupby(group_col, dropna=False)
+                .agg(flagged_orders=("order_id", "nunique"))
+                .reset_index()
+                .fillna({group_col: "Không rõ"})
+                .sort_values("flagged_orders", ascending=False)
+                .head(10)
+            )
+            chart = px.bar(
+                breakdown.sort_values("flagged_orders", ascending=True),
+                x="flagged_orders",
+                y=group_col,
+                orientation="h",
+                title=f"So sánh theo {breakdown_dimension[0].lower()}",
+                color_discrete_sequence=["#3B82F6"],
+                text="flagged_orders",
+            )
+            chart.update_traces(textposition="outside")
+            _style_plotly_chart(chart, xaxis_title=None, yaxis_title=None)
+            st.plotly_chart(chart, width="stretch", key=f"analyst_breakdown_{group_col}")
 
     left, right = st.columns([1.1, 1])
     with left:
-        st.markdown("#### Top cặp tài xế - khách hàng đáng nghi")
-        pair_summary = build_pair_summary(pairs)
-        if pair_summary.empty:
-            st.info("Không có dữ liệu cặp đáng nghi trong bộ lọc hiện tại.")
-        else:
-            st.dataframe(
-                pair_summary.head(20).rename(columns=PAIR_COLUMN_LABELS),
-                width="stretch",
-                hide_index=True,
-            )
+        with st.container(border=True):
+            st.markdown("#### Top cặp tài xế - khách hàng đáng nghi")
+            pair_summary = build_pair_summary(pairs)
+            if pair_summary.empty:
+                st.info("Không có dữ liệu cặp đáng nghi trong bộ lọc hiện tại.")
+            else:
+                _show_table(pair_summary.head(20).rename(columns=PAIR_COLUMN_LABELS))
     with right:
-        st.markdown("#### Lý do bị flag để analyst hiểu")
-        if reasons.empty:
-            st.info("Không có dữ liệu lý do bị flag.")
-        else:
-            reason_view = build_reason_overview(reasons).rename(
-                columns={
-                    "reason_code": "Mã lý do",
-                    "affected_pairs": "Số cặp ảnh hưởng",
-                    "avg_priority_score": "Điểm ưu tiên trung bình",
-                    "avg_ghost_rate": "Tỷ lệ ghost trip trung bình",
-                    "flag_reason_vi": "Diễn giải để người xem hiểu",
-                }
-            )
-            st.dataframe(reason_view, width="stretch", hide_index=True)
-  
+        with st.container(border=True):
+            st.markdown("#### Lý do bị flag để analyst hiểu")
+            if reasons.empty:
+                st.info("Không có dữ liệu lý do bị flag.")
+            else:
+                reason_view = build_reason_overview(reasons).rename(
+                    columns={
+                        "reason_code": "Mã lý do",
+                        "affected_pairs": "Số cặp ảnh hưởng",
+                        "avg_priority_score": "Điểm ưu tiên trung bình",
+                        "avg_ghost_rate": "Tỷ lệ ghost trip trung bình",
+                        "flag_reason_vi": "Diễn giải để người xem hiểu",
+                    }
+                )
+                _show_table(reason_view)
+
 
 def _render_component_tab(components: pd.DataFrame, flags: pd.DataFrame) -> None:
     st.subheader("Điều tra nhóm WCC")
@@ -919,37 +1314,43 @@ def _render_component_tab(components: pd.DataFrame, flags: pd.DataFrame) -> None
         st.info("Không có dữ liệu nhóm WCC trong bộ lọc hiện tại.")
         return
 
-    overview = components[
-        [
-            "component_id",
-            "component_size",
-            "flagged_orders",
-            "flagged_drivers",
-            "flagged_customers",
-            "flagged_pairs",
-            "max_priority_score",
-            "avg_network_support_score",
-            "top_service",
-            "top_rule",
-        ]
-    ].rename(
-        columns={
-            "component_id": "ID nhóm WCC",
-            "component_size": "Kích thước nhóm",
-            "flagged_orders": "Đơn bị flag",
-            "flagged_drivers": "Tài xế",
-            "flagged_customers": "Khách hàng",
-            "flagged_pairs": "Cặp",
-            "max_priority_score": "Điểm ưu tiên cao nhất",
-            "avg_network_support_score": "Điểm hỗ trợ mạng",
-            "top_service": "Dịch vụ nổi bật",
-            "top_rule": "Rule chính",
-        }
-    )
-    st.dataframe(overview.head(15), width="stretch", hide_index=True)
+    with st.container(border=True):
+        overview = components[
+            [
+                "component_display_id",
+                "component_size",
+                "flagged_orders",
+                "flagged_drivers",
+                "flagged_customers",
+                "flagged_pairs",
+                "max_priority_score",
+                "avg_network_support_score",
+                "top_service",
+                "top_rule",
+            ]
+        ].rename(
+            columns={
+                "component_display_id": "ID nhóm WCC",
+                "component_size": "Kích thước nhóm",
+                "flagged_orders": "Số đơn bị flag",
+                "flagged_drivers": "Số tài xế",
+                "flagged_customers": "Số khách hàng",
+                "flagged_pairs": "Số cặp",
+                "max_priority_score": "Điểm ưu tiên cao nhất",
+                "avg_network_support_score": "Điểm hỗ trợ mạng",
+                "top_service": "Dịch vụ nổi bật",
+                "top_rule": "Rule chính",
+            }
+        )
+        _show_table(overview.head(15))
 
-    component_ids = components["component_id"].dropna().astype(str).tolist()
-    selected_component = st.selectbox("Chọn nhóm WCC để xem chi tiết", options=component_ids)
+    component_options = components[["component_id", "component_display_id"]].dropna(subset=["component_id"]).copy()
+    component_labels = dict(zip(component_options["component_id"].astype(str), component_options["component_display_id"].astype(str)))
+    selected_component = st.selectbox(
+        "Chọn nhóm WCC để xem chi tiết",
+        options=component_options["component_id"].astype(str).tolist(),
+        format_func=lambda raw_id: component_labels.get(str(raw_id), str(raw_id)),
+    )
     component_flags = flags[flags["component_id"].astype(str) == selected_component].copy()
     component_row = components[components["component_id"].astype(str) == selected_component].iloc[0]
 
@@ -960,15 +1361,14 @@ def _render_component_tab(components: pd.DataFrame, flags: pd.DataFrame) -> None
     c4.metric("Số khách hàng", f"{int(component_row['flagged_customers']):,}")
 
     st.info(
-        f"Nhóm WCC này nổi bật ở dịch vụ '{component_row['top_service']}', "
-        f"đang được dẫn bởi rule '{component_row['top_rule']}'. "
+        f"{component_row.get('component_display_id', component_row['component_id'])} nổi bật ở dịch vụ '{component_row['top_service']}', đang được dẫn bởi rule '{component_row['top_rule']}'."
     )
 
     detail_columns = [
         column
         for column in [
             "order_id",
-            "order_date",
+            "complete_time_local_tz",
             "driver_id",
             "customer_id",
             "service_name",
@@ -980,11 +1380,12 @@ def _render_component_tab(components: pd.DataFrame, flags: pd.DataFrame) -> None
         ]
         if column in component_flags.columns
     ]
-    st.dataframe(
-        component_flags[detail_columns].sort_values("priority_score", ascending=False).rename(columns=DETAIL_COLUMN_LABELS),
-        width="stretch",
-        hide_index=True,
-    )
+
+    with st.container(border=True):
+        _show_table(
+            component_flags[detail_columns].sort_values("priority_score", ascending=False).rename(columns=DETAIL_COLUMN_LABELS)
+        )
+    return
 
     st.markdown("#### Cypher mẫu cho nhóm WCC này")
     st.code(build_component_cypher_query(component_flags, str(selected_component)), language="cypher")
@@ -1001,7 +1402,7 @@ def _render_case_tab(flags: pd.DataFrame) -> None:
         column
         for column in [
             "order_id",
-            "order_date",
+            "complete_time_local_tz",
             "driver_id",
             "customer_id",
             "service_name",
@@ -1019,13 +1420,196 @@ def _render_case_tab(flags: pd.DataFrame) -> None:
         ]
         if column in flags.columns
     ]
-    detail_frame = flags[detail_columns].sort_values(["priority_score", "order_date"], ascending=[False, False]).copy()
+    case_sort_columns = ["priority_score"]
+    case_sort_ascending = [False]
+    if "complete_time_local_tz" in flags.columns:
+        case_sort_columns.append("complete_time_local_tz")
+        case_sort_ascending.append(False)
+    elif "order_date" in flags.columns:
+        case_sort_columns.append("order_date")
+        case_sort_ascending.append(False)
+    detail_frame = flags[detail_columns].sort_values(case_sort_columns, ascending=case_sort_ascending).copy()
+    overview_frame = detail_frame.drop_duplicates(subset=["order_id"], keep="first").copy()
 
-    st.dataframe(
-        detail_frame.rename(columns=DETAIL_COLUMN_LABELS),
-        width="stretch",
-        hide_index=True,
+    with st.container(border=True):
+        _show_table(overview_frame.rename(columns=DETAIL_COLUMN_LABELS))
+
+    selector_mode = st.radio(
+        "Xem case theo",
+        options=["Đơn", "Tài xế", "Khách hàng"],
+        horizontal=True,
+        key="case_selector_mode",
     )
+
+    if selector_mode == "Đơn":
+        selected_value = st.selectbox(
+            "Chọn Đơn bị flag",
+            options=overview_frame["order_id"].astype(str).unique().tolist(),
+        )
+        selected_cases = detail_frame[detail_frame["order_id"].astype(str) == selected_value].copy()
+    elif selector_mode == "Tài xế":
+        selected_value = st.selectbox(
+            "Chọn tài xế",
+            options=detail_frame["driver_id"].dropna().astype(str).unique().tolist(),
+        )
+        selected_cases = detail_frame[detail_frame["driver_id"].astype(str) == selected_value].copy()
+    else:
+        selected_value = st.selectbox(
+            "Chọn khách hàng",
+            options=detail_frame["customer_id"].dropna().astype(str).unique().tolist(),
+        )
+        selected_cases = detail_frame[detail_frame["customer_id"].astype(str) == selected_value].copy()
+
+    if selected_cases.empty:
+        st.info("Không có case phù hợp với lựa chọn hiện tại.")
+        return
+
+    selected_row = selected_cases.iloc[0]
+    unique_rules = selected_cases["business_rule_label"].dropna().astype(str).unique().tolist()
+    related_orders = selected_cases["order_id"].astype(str).nunique()
+    related_drivers = selected_cases["driver_id"].dropna().astype(str).nunique()
+    related_customers = selected_cases["customer_id"].dropna().astype(str).nunique()
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Đơn bị flag", f"{related_orders:,}")
+    if selector_mode == "Tài xế":
+        c2.metric("Tài xế", str(selected_value))
+        c3.metric("Khách hàng liên quan", f"{related_customers:,}")
+        c4.metric("Rule fraud", f"{len(unique_rules):,}")
+    elif selector_mode == "Khách hàng":
+        c2.metric("Khách hàng", str(selected_value))
+        c3.metric("Tài xế liên quan", f"{related_drivers:,}")
+        c4.metric("Rule fraud", f"{len(unique_rules):,}")
+    else:
+        c2.metric("Tài xế", str(selected_row.get("driver_id", "Không rõ")))
+        c3.metric("Khách hàng", str(selected_row.get("customer_id", "Không rõ")))
+        c4.metric("Điểm ưu tiên", f"{float(selected_row.get('priority_score', 0)):.2f}")
+
+    left, right = st.columns([1.15, 1])
+    with left:
+        with st.container(border=True):
+            st.markdown("#### Thông tin cơ bản")
+            if selector_mode == "Tài xế":
+                st.markdown(
+                    f"- **Tài xế:** {selected_value}\n"
+                    f"- **Số đơn bị flag:** {related_orders:,}\n"
+                    f"- **Số khách hàng liên quan:** {related_customers:,}\n"
+                    f"- **Mức rủi ro xuất hiện:** {', '.join(sorted(selected_cases['risk_tier'].dropna().astype(str).unique().tolist())) or 'Không rõ'}"
+                )
+            elif selector_mode == "Khách hàng":
+                st.markdown(
+                    f"- **Khách hàng:** {selected_value}\n"
+                    f"- **Số đơn bị flag:** {related_orders:,}\n"
+                    f"- **Số tài xế liên quan:** {related_drivers:,}\n"
+                    f"- **Mức rủi ro xuất hiện:** {', '.join(sorted(selected_cases['risk_tier'].dropna().astype(str).unique().tolist())) or 'Không rõ'}"
+                )
+            else:
+                st.markdown(
+                    f"- **Đơn:** {selected_row.get('order_id', 'Không rõ')}\n"
+                    f"- **Ngày hoàn thành:** {_format_period_value(selected_row.get('complete_time_local_tz'))}\n"
+                    f"- **Dịch vụ:** {selected_row.get('service_name', 'Không rõ')}\n"
+                    f"- **Mức rủi ro:** {selected_row.get('risk_tier', 'Không rõ')}\n"
+                    f"- **Nhóm WCC liên quan:** {selected_row.get('component_id', 'Không rõ')}\n"
+                    f"- **Kích thước nhóm:** {selected_row.get('component_size', 'Không rõ')}"
+                )
+    with right:
+        with st.container(border=True):
+            st.markdown("#### Rule fraud nghiệp vụ")
+            if len(unique_rules) == 1:
+                st.markdown(f"**{unique_rules[0]}**")
+                st.caption(str(selected_row.get("business_rule_story", "Chưa có diễn giải.")))
+            else:
+                st.markdown("**Các rule xuất hiện**")
+                st.caption(", ".join(unique_rules[:5]))
+            st.markdown(
+                f"- **Vì sao bị flag:** {selected_row.get('flag_reason_vi', 'Chưa có diễn giải')}\n"
+                f"- **Tín hiệu hỗ trợ:** {selected_row.get('supporting_signal_vi', 'Chưa có diễn giải')}\n"
+                f"- **Mã lý do flag:** {selected_row.get('reason_code', 'Không rõ')}"
+            )
+
+    if selector_mode == "Tài xế":
+        related_customers_frame = (
+            selected_cases[
+                [column for column in ["customer_id", "order_id", "complete_time_local_tz", "business_rule_label", "priority_score"] if column in selected_cases.columns]
+            ]
+            .sort_values(["priority_score", "complete_time_local_tz"], ascending=[False, False])
+            .rename(
+                columns={
+                    "customer_id": "Khách hàng liên quan",
+                    "order_id": "Đơn bị flag",
+                    "complete_time_local_tz": "Ngày hoàn thành",
+                    "business_rule_label": "Rule fraud nghiệp vụ",
+                    "priority_score": "Điểm ưu tiên",
+                }
+            )
+        )
+        with st.container(border=True):
+            st.markdown("#### Các Đơn bị gắn flag theo tài xế này")
+            _show_table(selected_cases.rename(columns=DETAIL_COLUMN_LABELS))
+        with st.container(border=True):
+            st.markdown("#### Các khách hàng liên quan đến tài xế này")
+            _show_table(related_customers_frame)
+    elif selector_mode == "Khách hàng":
+        related_drivers_frame = (
+            selected_cases[
+                [column for column in ["driver_id", "order_id", "complete_time_local_tz", "business_rule_label", "priority_score"] if column in selected_cases.columns]
+            ]
+            .sort_values(["priority_score", "complete_time_local_tz"], ascending=[False, False])
+            .rename(
+                columns={
+                    "driver_id": "Tài xế liên quan",
+                    "order_id": "Đơn bị flag",
+                    "complete_time_local_tz": "Ngày hoàn thành",
+                    "business_rule_label": "Rule fraud nghiệp vụ",
+                    "priority_score": "Điểm ưu tiên",
+                }
+            )
+        )
+        with st.container(border=True):
+            st.markdown("#### Các Đơn bị gắn flag theo khách hàng này")
+            _show_table(selected_cases.rename(columns=DETAIL_COLUMN_LABELS))
+        with st.container(border=True):
+            st.markdown("#### Các tài xế liên quan đến khách hàng này")
+            _show_table(related_drivers_frame)
+    else:
+        with st.container(border=True):
+            st.markdown("#### Các case liên quan")
+            _show_table(selected_cases.rename(columns=DETAIL_COLUMN_LABELS))
+    return
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Đơn bị flag", f"{selected_cases['order_id'].astype(str).nunique():,}")
+    c2.metric("Tài xế", str(selected_row.get("driver_id", "Không rõ")))
+    c3.metric("Khách hàng", str(selected_row.get("customer_id", "Không rõ")))
+    c4.metric("Điểm ưu tiên", f"{float(selected_row.get('priority_score', 0)):.2f}")
+
+    left, right = st.columns([1.15, 1])
+    with left:
+        with st.container(border=True):
+            st.markdown("#### Thông tin cơ bản")
+            st.markdown(
+                f"- **Đơn:** {selected_row.get('order_id', 'Không rõ')}\n"
+                # f"- **Ngày Đơn:** {_format_period_value(selected_row.get('order_date'))}\n"
+                f"- **Dịch vụ:** {selected_row.get('service_name', 'Không rõ')}\n"
+                f"- **Mức rủi ro:** {selected_row.get('risk_tier', 'Không rõ')}\n"
+                f"- **Nhóm WCC liên quan:** {selected_row.get('component_id', 'Không rõ')}\n"
+                f"- **Kích thước nhóm:** {selected_row.get('component_size', 'Không rõ')}"
+            )
+    with right:
+        with st.container(border=True):
+            st.markdown("#### Rule fraud nghiệp vụ")
+            st.markdown(f"**{selected_row.get('business_rule_label', 'Không rõ')}**")
+            st.caption(str(selected_row.get("business_rule_story", "Chưa có diễn giải.")))
+            st.markdown(
+                f"- **Vì sao bị flag:** {selected_row.get('flag_reason_vi', 'Chưa có diễn giải')}\n"
+                f"- **Tín hiệu hỗ trợ:** {selected_row.get('supporting_signal_vi', 'Chưa có diễn giải')}\n"
+                f"- **Mã lý do flag:** {selected_row.get('reason_code', 'Không rõ')}"
+            )
+
+    with st.container(border=True):
+        st.markdown("#### Các case liên quan")
+        _show_table(selected_cases.rename(columns=DETAIL_COLUMN_LABELS))
+    return
 
     selected_order_id = st.selectbox(
         "Chọn một đơn bị flag để xem câu chuyện case",
@@ -1058,11 +1642,7 @@ def _render_case_tab(flags: pd.DataFrame) -> None:
 
 def render_dashboard() -> None:
     st.set_page_config(page_title="Dashboard Fraud KB-C", layout="wide")
-    st.title("Dashboard Fraud KB-C")
-    st.caption(
-        "Dashboard này được sắp theo 3 lớp sử dụng: "
-        "người xem tổng quan, analyst cần phân tích sâu và investigator cần điều tra case."
-    )
+    _inject_dashboard_theme()
 
     reports = load_reports(str(REPORT_DIR))
     flags = _normalize_flags(reports["flags"])
@@ -1073,13 +1653,13 @@ def render_dashboard() -> None:
         st.warning("Không tìm thấy dữ liệu `flagged_orders.parquet` để dựng dashboard.")
         return
 
-    filters = _render_filters(flags)
+    filters = _render_header_and_filters(flags)
     filtered_flags, filtered_pairs, filtered_reasons = _apply_filters(flags, pairs, reasons, filters)
     if filtered_flags.empty:
         st.warning("Không có dữ liệu trong bộ lọc hiện tại.")
         return
 
-    granularity_label = st.radio("Chu kỳ tổng hợp", options=list(GRANULARITY_CONFIG.keys()), horizontal=True)
+    granularity_label = st.session_state.get("granularity_radio", "Ngày")
     period_col = GRANULARITY_CONFIG[granularity_label]
 
     metrics = build_overview_metrics(filtered_flags)
@@ -1090,10 +1670,10 @@ def render_dashboard() -> None:
 
     _render_metric_cards(metrics)
     _render_insight_cards(insights)
-    _render_rule_story_overview_clean(rule_overview)
+    _render_rule_story_overview(rule_overview)
+
     st.caption(
-        "Lưu ý: nguồn hiện tại là tập đơn đã bị flag, nên 'Tổng đơn trong tập flagged' "
-        "không phải tổng số đơn của toàn hệ thống."
+        "Lưu ý: nguồn hiện tại là tập đơn đã bị flag, nên 'Tổng đơn trong tập flagged' không phải tổng số đơn của toàn hệ thống."
     )
 
     executive_tab, analyst_tab, component_tab, case_tab = st.tabs(
@@ -1101,7 +1681,7 @@ def render_dashboard() -> None:
     )
 
     with executive_tab:
-        _render_executive_tab_clean(filtered_flags, period_summary, rule_overview, component_summary, granularity_label)
+        _render_executive_tab(filtered_flags, period_summary, component_summary, granularity_label)
 
     with analyst_tab:
         _render_analyst_tab(filtered_flags, filtered_pairs, filtered_reasons, period_summary, granularity_label)

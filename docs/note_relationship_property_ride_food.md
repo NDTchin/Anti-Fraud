@@ -1,162 +1,241 @@
-# Note Ve Property Va Relationship Cho Dữ Liệu `ride` / `food`
+# Note Ve Property Va Relationship Cho Demo Visualize `ride`
 
-## Phạm vi tài liệu
+## Pham vi tai lieu
 
-Tai liệu này giải thích vai trò của `property` và `relationship` trong order graph hiện có, nhưng được viết lại để phù hợp với hướng mới của project:
+Tai lieu nay khong con mo ta order graph day du cho ca `ride` va `food`.
 
-- `docs/graph_algorithms_for_driver_customer_ghost_trip_collusion.md`
+Muc tieu moi la phuc vu flow demo:
 
-Mục tiêu là làm rõ:
+1. demo dashboard truoc
+2. sau do mo Neo4j de visualize nhanh cac case can giai thich
 
-- dữ liệu nào là `graph core input`
-- dữ liệu nào là `shared-entity support`
-- dữ liệu nào là `optional enrichment`
+Vi vay, tai lieu nay chi tap trung vao schema toi thieu can deploy cho phan visualize, uu tien:
 
-## Kết luận nhanh
+- `order_id`
+- `driver_id`
+- `customer_id`
+- tong so don
+- so don bi flag
+- tai xe bi gan flag
+- khach hang bi gan flag
 
-Trong hướng mới, schema order graph nên được hiểu theo 3 lớp:
+## Ket luan nhanh
 
-1. `pair graph inputs`
-2. `suspicious graph inputs`
-3. `enrichment attributes`
+Cho flow demo hien tai, Neo4j khong nen giu full graph nhu moi truong local.
 
-Nói cách khác:
+Schema nen duoc rut gon thanh:
 
-- không phải mọi property/relationship đều có vai trò ngang nhau
-- ưu tiên cao nhất là các thành phần giúp aggregate thành pair `driver-customer`
-- ưu tiên kế tiếp là các thành phần giúp nối suspicious pairs để chạy `WCC`
+1. `Driver`
+2. `Customer`
+3. `Order`
+4. `(:Driver)-[:SERVED]->(:Order)`
+5. `(:Customer)-[:PLACED]->(:Order)`
 
-## 1. Pair graph inputs
+Tat ca cac node phu va relationship phu chi nen giu lai neu buoi demo thuc su can dao sau vao shared infrastructure.
 
-Đây là những thành phần quan trọng nhất nếu project đi theo 3 graph algorithms cốt lõi.
+## 1. Muc tieu cua graph demo
 
-Cần có:
+Graph demo tren Neo4j duoc dung de tra loi nhanh cac cau hoi:
+
+- Don nay thuoc ve tai xe nao va khach hang nao?
+- Tai xe nay co bao nhieu don trong tap demo?
+- Khach hang nay co bao nhieu don trong tap demo?
+- Don nao bi flag?
+- Bao nhieu tai xe co lien quan toi don bi flag?
+- Bao nhieu khach hang co lien quan toi don bi flag?
+
+Do do, graph demo uu tien su ro rang, nhe, va de explain trong luc present hon la day du schema.
+
+## 2. Graph core can giu
+
+Day la lop schema bat buoc phai co khi deploy demo:
 
 - node `Order`
 - node `Driver`
 - node `Customer`
-- `(:Customer)-[:PLACED]->(:Order)`
 - `(:Driver)-[:SERVED]->(:Order)`
+- `(:Customer)-[:PLACED]->(:Order)`
 
-Từ những liên kết này downstream mới có thể tổng hợp thành:
+Day la phan du lieu toi thieu de:
 
-- `trip_count`
-- `driver_trip_count`
-- `customer_trip_count`
-- `pair_share_driver`
-- `pair_share_customer`
+- mo graph theo `order_id`
+- mo graph theo `driver_id`
+- mo graph theo `customer_id`
+- tinh metric tong quan cho tap demo
 
-Nếu thiếu lớp này, không thể build đúng `weighted edge outlier detection` và `bipartite concentration scoring`.
+Neu thieu lop nay, graph demo se khong phuc vu dung cau chuyen can trinh bay.
 
-## 2. Suspicious graph inputs
+## 3. Property nen giu tren tung node
 
-Đây là lớp dữ liệu dùng để nối suspicious pairs thành network phục vụ `WCC`.
+### `Order`
 
-Quan trọng nhất:
+Nen giu:
+
+- `order_id`
+- `order_date`
+- `is_flagged`
+- `priority_score`
+- `risk_tier`
+
+Y nghia:
+
+- `order_id`: de drill-down theo don
+- `order_date`: de giai thich boi canh thoi gian
+- `is_flagged`: de to mau va filter nhanh
+- `priority_score`: de sap thu tu uu tien
+- `risk_tier`: de giai thich muc do can review
+
+### `Driver`
+
+Nen giu:
+
+- `driver_id`
+- `is_flagged`
+- `flagged_order_count`
+
+Y nghia:
+
+- `driver_id`: de tra cuu va visualize
+- `is_flagged`: de to mau node tai xe
+- `flagged_order_count`: de show tai xe nay co bao nhieu don bi flag
+
+### `Customer`
+
+Nen giu:
+
+- `customer_id`
+- `is_flagged`
+- `flagged_order_count`
+
+Y nghia tuong tu `Driver`.
+
+## 4. Metric nao nen tinh truc tiep tu graph
+
+Cho buoi demo, khong can tao schema phuc tap cho metric.
+
+Co the tinh truc tiep bang Cypher:
+
+- tong so don
+- so don bi flag
+- so tai xe bi gan flag
+- so khach hang bi gan flag
+
+Noi cach khac:
+
+- metric tong quan nen la query
+- graph nen la data model de visualize
+
+Khong can tao them node tong hop neu chua co nhu cau snapshot theo ngay.
+
+## 5. Nhung thanh phan khong can dua len ban deploy demo
+
+De toi uu chi phi va kich thuoc DB deploy, khong nen mang len ban demo cac nhom sau:
 
 - `Address`
 - `PaymentMethod`
 - `PromotionCode`
 - `PromotionCampaign`
+- `RideService`
+- `CancelActor`
+- `CancelReason`
+- `ServiceType`
+- `SubVertical`
+- `TravelMode`
+- `ChannelType`
 
-Quan hệ liên quan:
+Cung khong can uu tien:
 
-- `PICKUP_AT`
-- `DROPOFF_AT`
-- `PAID_BY`
-- `USED_PROMO`
-- `IN_CAMPAIGN`
+- `Merchant`
+- `DropoffFailActor`
+- `DropoffFailCode`
+- cac label chi con ton tai o schema cu nhung khong phuc vu story demo
 
-Vai trò:
+Ly do:
 
-- nối pair qua shared address
-- nối pair qua shared payment
-- nối pair qua shared promo
+- chung lam graph nang hon
+- query cham hon
+- visual trong Neo4j Browser de roi
+- khong phuc vu truc tiep cho cau chuyen `order-driver-customer-flagged`
 
-Đây là phần schema phục vụ trực tiếp cho suspicious graph, khác với pair graph core nhưng vẫn là mandatory support cho giai đoạn cluster investigation.
+## 6. Nguon data nen dua vao DB demo
 
-## 3. Enrichment attributes
+DB demo khong nen duoc build tu full `neo4j-store`.
 
-Nhóm này vẫn hữu ích, nhưng không phải trung tâm của hướng mới.
+Nen tao mot tap demo moi tu:
 
-Ví dụ:
+- source order goc da clean
+- danh sach `order_id` bi flag trong `reports/task3/flagged_orders.parquet`
 
-- `avg_kmh`
-- `declared_km`
-- `actual_km`
-- `km_diff`
-- `intrip_time_second`
-- `lead_time_second`
-- `gmv`
-- `discount`
-- `service_name`
-- `service_type`
-- `sub_vertical_name`
-- `travel_mode`
-- `channel_type`
+Sau khi join, tap import demo nen co cac cot:
 
-Chung có thể được dùng để:
+- `order_id`
+- `driver_id`
+- `customer_id`
+- `order_date`
+- `is_flagged`
+- `priority_score`
+- `risk_tier`
 
-- tạo business filters
-- giải thích case
-- tính enrichment signals sau này
+Day la du lieu du de:
 
-Nhưng không nên làm lu mờ 2 lớp ưu tiên cao hơn.
+- tinh tong so don trong tap demo
+- tinh so don bi flag
+- tinh so tai xe bi gan flag
+- tinh so khach hang bi gan flag
+- mo graph theo order, driver, customer
 
-## 4. Cách hiểu đúng mô hình lai property + relationship
+## 7. Cach cat du lieu cho ban deploy demo
 
-Schema hiện có có nhiều nhóm dữ liệu vừa tồn tại dưới dạng `property` trên `Order`, vừa tồn tại dưới dạng node/relationship chuẩn hóa.
+Khong nen deploy toan bo universe du lieu.
 
-Điều này vẫn hợp lý trong hướng mới vì:
+Nen cat theo mot trong hai cach:
 
-- property giúp filter nhanh và làm feature table
-- relationship giúp graph traversal và shared-entity linking
+1. chi lay cac order bi flag
+2. lay cac order bi flag va toan bo order lien quan toi driver/customer bi flag
 
-Do đó, không cần ép buộc schema về một cực:
+Cach `2` thuong hop ly hon cho demo vi:
 
-- "chỉ property"
-- hoặc "chỉ relationship"
+- graph nhin tu nhien hon
+- van nho hon full DB rat nhieu
+- de explain tai sao mot driver/customer bi gan flag
 
-Cần đánh giá mọi trường theo câu hỏi:
+Neu can tiep tuc cat nho hon nua, co the gioi han:
 
-- có phục vụ pair graph không?
-- có phục vụ suspicious graph không?
-- hay chỉ là enrichment?
+- top `N` order theo `priority_score`
+- top `N` driver bi flag
+- top `N` customer bi flag
 
-## 5. Các thành phần quan trọng nhất đối với hướng `Driver-Customer Ghost-Trip Collusion`
+## 8. Dinh huong deploy phase 2
 
-Nếu phải ưu tiên schema theo tác động tới hướng mới, thứ tự nên là:
+Phase 2 khong nham muc tieu thay the he thong graph day du o local.
 
-1. `Driver`, `Customer`, `Order`
+Muc tieu dung hon la:
+
+- tao mot `Neo4j demo graph`
+- nhe
+- de import
+- de query
+- de visualize trong Browser hoac Aura
+
+Do do:
+
+- local full graph van co gia tri cho nghien cuu sau nay
+- ban deploy chi nen giu subgraph phuc vu demo
+
+## 9. Final note
+
+Trong boi canh hien tai, can phan biet ro hai vai tro:
+
+- `dashboard`: noi trinh bay tong quan va shortlist
+- `Neo4j demo graph`: noi mo rong va visualize case
+
+Schema duoc uu tien cho ban deploy demo vi the khong can day du nhu local store.
+
+Thu tu uu tien dung la:
+
+1. `Order`, `Driver`, `Customer`
 2. `PLACED`, `SERVED`
-3. `Address`, `PaymentMethod`, `PromotionCode`
-4. `PICKUP_AT`, `DROPOFF_AT`, `PAID_BY`, `USED_PROMO`
-5. metric và taxonomy enrichment
+3. `is_flagged`, `flagged_order_count`, `priority_score`, `risk_tier`
+4. cac metric query cho tong quan
 
-Đây là cách nhìn schema phù hợp nhất với pipeline:
-
-1. build pair table
-2. score suspicious pairs
-3. build suspicious graph
-4. run `WCC`
-
-## 6. Food và ride nên được đọc thế nào trong bối cảnh này
-
-`ride` là domain ưu tiên cho hướng mới, vì bài toán hiện tại là `Driver-Customer Ghost-Trip Collusion`.
-
-Do đó:
-
-- các liên kết giữa `Driver`, `Customer`, `Order` là trọng tâm
-- shared entities phục vụ repeated pair investigation là trọng tâm
-
-`food` vẫn có giá trị ở mức schema dùng chung, nhưng không nên chi phối cách mô tả ưu tiên modeling cho bài toán này.
-
-## 7. Final note
-
-Khi doc schema hiện có để phục vụ hướng mới, nên nhớ:
-
-- `Order` graph là tầng lưu trữ và truy vết
-- `pair graph` mới là tầng phân tích cốt lõi
-- `suspicious graph` là tầng điều tra network
-
-Vì vậy, doc/schema note này nên được hiểu như một tài liệu định hướng ưu tiên dữ liệu cho bài toán pair-collusion, không phải một bản inventory trùng lặp mới field trong importer.
+Neu mot property hay relationship khong giup ke cau chuyen demo ro hon, thi khong nen dua vao ban deploy phase 2.
