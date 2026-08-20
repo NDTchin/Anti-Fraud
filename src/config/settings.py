@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     neo4j_username: str = "neo4j"
     neo4j_password: str = "change-me"
     neo4j_database: str = "neo4j"
-    raw_data_path: Path = Path("data/orders_ride_masked_2026-07-14.parquet")
+    raw_data_path: Path = Path("data/handoff/ride/cleaned_orders/orders_ride_masked_2026-07-29.parquet")
     processed_data_dir: Path = Path("data/processed")
 
     @property

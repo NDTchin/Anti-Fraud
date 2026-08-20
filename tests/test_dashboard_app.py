@@ -24,10 +24,9 @@ def test_repeated_customer_driver_summary_prioritizes_kbc_signals() -> None:
                 "customer_id": "c1",
                 "driver_id": "d1",
                 "reason_code": "KB-C",
-                "rule_score": 72.3,
-                "rule_score_base": 66.65,
-                "graph_risk_score": 82.78,
-                "final_risk_score": 72.3,
+                "pair_core_score": 66.65,
+                "network_support_score": 82.78,
+                "priority_score": 72.3,
                 "n_trips": 64,
                 "n_ghost": 20,
                 "min_gap_min": 0.9,
@@ -45,10 +44,9 @@ def test_repeated_customer_driver_summary_prioritizes_kbc_signals() -> None:
                 "customer_id": "c1",
                 "driver_id": "d1",
                 "reason_code": "KB-C",
-                "rule_score": 71.0,
-                "rule_score_base": 66.65,
-                "graph_risk_score": 80.0,
-                "final_risk_score": 71.0,
+                "pair_core_score": 66.65,
+                "network_support_score": 80.0,
+                "priority_score": 71.0,
                 "n_trips": 64,
                 "n_ghost": 20,
                 "min_gap_min": 1.2,
@@ -66,10 +64,9 @@ def test_repeated_customer_driver_summary_prioritizes_kbc_signals() -> None:
                 "customer_id": "c2",
                 "driver_id": "d2",
                 "reason_code": "KB-C",
-                "rule_score": 45.0,
-                "rule_score_base": 43.0,
-                "graph_risk_score": 50.0,
-                "final_risk_score": 45.0,
+                "pair_core_score": 43.0,
+                "network_support_score": 50.0,
+                "priority_score": 45.0,
                 "n_trips": 13,
                 "n_ghost": 1,
                 "min_gap_min": 8.0,
@@ -96,9 +93,9 @@ def test_repeated_customer_driver_summary_prioritizes_kbc_signals() -> None:
     assert summary.iloc[0]["max_ghost_rate"] == 20 / 64
     assert bool(summary.iloc[0]["high_confidence"]) is True
     assert summary.iloc[0]["avg_gmv"] == 12390.0
-    assert summary.iloc[0]["avg_rule_score_base"] == 66.65
-    assert summary.iloc[0]["avg_graph_risk_score"] == 81.39
-    assert summary.iloc[0]["max_final_risk_score"] == 72.3
+    assert summary.iloc[0]["avg_pair_core_score"] == 66.65
+    assert summary.iloc[0]["avg_network_support_score"] == 81.39
+    assert summary.iloc[0]["max_priority_score"] == 72.3
     assert summary.iloc[0]["max_supporting_signal_count"] == 4
     assert summary.iloc[0]["max_linked_pair_count"] == 6
     assert summary.iloc[0]["max_component_size"] == 7
@@ -106,7 +103,7 @@ def test_repeated_customer_driver_summary_prioritizes_kbc_signals() -> None:
 
 
 def test_repeated_customer_driver_display_name_reflects_kbc_scope() -> None:
-    assert RULE_DISPLAY_NAMES["REPEATED_CUSTOMER_DRIVER"] == "KB-C Superfast Driver-Customer Duo"
+    assert RULE_DISPLAY_NAMES["REPEATED_CUSTOMER_DRIVER"] == "Danh sach cap tai xe - khach hang can xem"
 
 
 def test_window_metrics_use_latest_available_data_date() -> None:

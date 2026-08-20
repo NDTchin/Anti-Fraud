@@ -2,137 +2,147 @@
 
 ## Problem statement
 
-Sprint 2 is now focused on one concrete ride-fraud pattern:
+Sprint 2 được reset scope để đi đúng một pattern gian lận cụ thể:
 
-- driver and customer collude to create fake trips
-- the same pair repeats at extreme frequency
-- some trips show `avg_kmh = 0`
-- consecutive trips can be created too quickly to be operationally plausible
+- driver và customer thông đồng tạo ghost trips
+- cùng một pair lặp lại với tần suất bất thường
+- hành vi nghi ngờ được nhìn trước hết ở cấp `driver-customer pair`
 
-The working entity in graph terms is the weighted edge `(Driver)-[SERVED]->(Order)<-[PLACED]-(Customer)`, aggregated into a driver-customer pair.
+ Tài liệu này theo sát hướng:
 
-## Graph algorithms that fit this problem
+- `docs/graph_algorithms_for_driver_customer_ghost_trip_collusion.md`
 
-Recommended graph-first techniques for this problem:
+## Sprint 2 objective
 
-1. Weighted bipartite edge outlier detection
-   Use the trip count on each `(driver_id, customer_id)` edge.
-   This is the strongest first-pass signal for collusion because fake-trip farming usually concentrates on a small number of pairs.
+Mục tiêu của Sprint 2 không phải build một fraud engine đầy đủ ngay lập tức.
 
-2. Pair concentration on each endpoint
-   Measure how much of a driver's activity and how much of a customer's activity is absorbed by the same counterpart.
-   This is equivalent to checking whether one weighted edge dominates both endpoint neighborhoods.
+Mục tiêu đúng hơn là xây được `graph core MVP` cho bài toán:
 
-3. Temporal edge anomaly
-   Treat consecutive trips on the same edge as a time series and flag unrealistically short repeat gaps.
-   This is the best operational signal for “đơn ảo/tạo quá nhanh”.
+1. shortlist suspicious pairs
+2. score mức độ collusion của pair
+3. gom pair thanh suspicious components de review
 
-4. Community detection on suspicious subgraph
-   After filtering suspicious pairs, run WCC or Louvain on the induced graph of drivers, customers, and shared addresses/routes.
-   This helps separate isolated collusion pairs from larger farming rings.
+## Graph abstraction chốt
 
-5. Node similarity / route reuse
-   Compare suspicious pairs by shared pickup-dropoff loops, shared promo behavior, or shared payment patterns.
-   This is useful for clustering multiple fake-trip scripts that reuse the same operating template.
+Đơn vị graph trung tâm:
 
-## Rules implemented on real ride data
+- node `Driver`
+- node `Customer`
+- weighted edge giữa `Driver` và `Customer`
 
-Implementation lives in:
+Trên mỗi edge cần có tối thiểu:
 
-- [src/algorithms/ride_collusion_graph.py](/D:/VSF/src/algorithms/ride_collusion_graph.py)
-- [src/rules/ride_kbc_rules.py](/D:/VSF/src/rules/ride_kbc_rules.py)
-- [src/scoring/ride_collusion_scoring.py](/D:/VSF/src/scoring/ride_collusion_scoring.py)
-- [scripts/build_task3_daily_outputs.py](/D:/VSF/scripts/build_task3_daily_outputs.py)
+- `trip_count`
+- `driver_trip_count`
+- `customer_trip_count`
+- `pair_share_driver`
+- `pair_share_customer`
 
-Current rule family:
+Đây là abstraction đủ để chạy MVP mà không phụ thuộc vào nhiều feature phụ.
 
-1. `KB-C_EXTREME_VOLUME`
-   Group by `(driver_id, customer_id)`.
-   Compute `n_trips`.
-   Flag pairs with `n_trips > quantile(0.9999)` in the active 4-day window.
+## Algorithms trong scope Sprint 2
 
-2. `KB-C_HIGH_GHOST_RATE`
-   Compute `n_ghost` where `avg_kmh = 0`.
-   Compute `ghost_rate = n_ghost / n_trips`.
-   Flag pairs with `ghost_rate > 0.3`.
+Sprint 2 chỉ nên chốt 3 graph algorithms cốt lõi:
 
-3. `KB-C_SUPERFAST_GAP`
-   Sort each pair by `order_time_local_tz`.
-   Compute `min_gap_min` between consecutive trips.
-   Flag pairs with `min_gap_min < 5`.
+1. `Weighted edge outlier detection`
+2. `Bipartite concentration scoring`
+3. `WCC`
 
-4. `KB-C_TIGHT_PAIR_SHARE`
-   Compute `pair_share_driver = n_trips / total_driver_trips`.
-   Compute `pair_share_customer = n_trips / total_customer_trips`.
-   Flag pairs that dominate both endpoints in the same window.
+## 1. Weighted edge outlier detection
 
-5. `KB-C_ROUTE_LOOP`
-   Compute the dominant pickup-dropoff route per pair.
-   Flag pairs whose dominant route absorbs at least half of trips.
+Dùng để:
 
-High-confidence logic:
+- tìm pair có `trip_count` nằm ở tail của phân phối
 
-- `high_confidence = (ghost_rate > 0.3) OR (min_gap_min < 5)`
+Đây là first-pass detector và là nguồn tạo suspicious seeds.
 
-## Real-data run on July 27, 2026
+## 2. Bipartite concentration scoring
 
-Command used:
+Dùng để:
 
-```powershell
-python -m scripts.build_task3_daily_outputs --report-dir reports/task3
-```
+- đo xem pair có chiếm một tỷ trọng bất thường trên cả phía driver và customer hay không
 
-Core run stats from the current 4-day ride file:
+Đây là lớp refinement quan trọng nhất để xác định collusion thay vì chỉ nhìn volume thuần túy.
 
-- active completed ride orders: `4,767,940`
-- unique driver-customer pairs: `4,621,522`
-- extreme trip threshold at `quantile(0.9999)`: `12`
-- candidate suspicious pairs above threshold: `371`
-- flagged order rows written to dashboard output: `11,000`
+## 3. WCC
 
-Pair-level reason counts:
+Dùng để:
 
-- `KB-C_EXTREME_VOLUME`: `371` pairs
-- `KB-C_TIGHT_PAIR_SHARE`: `244` pairs
-- `KB-C_SUPERFAST_GAP`: `47` pairs
-- `KB-C_HIGH_GHOST_RATE`: `26` pairs
-- `KB-C_ROUTE_LOOP`: `6` pairs
+- gom suspicious pairs thành component trên suspicious graph
 
-Daily order counts in dashboard output:
+Suspicious graph được nối bằng các shared entities hữu ích cho điều tra, ví dụ:
 
-- `2026-07-14`: `1,252`
-- `2026-07-15`: `1,524`
-- `2026-07-16`: `1,486`
-- `2026-07-17`: `1,523`
+- shared address
+- shared payment
+- shared promo
+- shared driver
+- shared customer
 
-## Known-case evaluation
+## Ngoài scope Sprint 2 core
 
-Known-case seed file:
+Các ý tưởng sau có thể làm sau, nhưng không nên là blocker của Sprint 2:
 
-- [data/handoff/ride/known_cases/kbc_known_pairs.csv](/D:/VSF/data/handoff/ride/known_cases/kbc_known_pairs.csv)
+- temporal anomaly scoring
+- ghost-rate scoring
+- route-loop scoring
+- Louvain
+- k-core
+- node similarity tổng quát
 
-The provided real example pair was added as a seed known case and was successfully flagged.
+Lý do:
 
-Observed seeded case:
+- không cần để chốt MVP graph core
+- để tạo scope quá rộng
+- để làm mờ bài toán repeated pair collusion
 
-- pair: `652280701c4d0c32` + `0cb58995c54abba0`
-- `n_trips = 64`
-- `avg_gmv = 12,390.625`
-- `min_gap_min = 0.9`
-- hit reasons include `KB-C_EXTREME_VOLUME` and `KB-C_SUPERFAST_GAP`
+## Deliverables nên có ở cuối Sprint 2
 
-## Dashboard outputs
+Sprint 2 nên kết thúc với các đầu ra sau:
 
-The script writes dashboard-ready files into [reports/task3](/D:/VSF/reports/task3):
+1. `pair table` theo time window
+2. `volume_score` cho mỗi pair
+3. `concentration_score` cho mỗi pair
+4. `suspicious_pair_list`
+5. `suspicious_graph`
+6. `component_id` và `component_size`
+7. `flagged_orders` để analyst review
 
-- `daily_rule_summary.csv`
-- `rule_model_comparison.csv`
-- `priority_recommendations.csv`
-- `quality_report.csv`
-- `flagged_orders.parquet`
-- `anomaly_scores.parquet`
-- `kbc_pair_summary.csv`
-- `kbc_pair_reasons.csv`
-- `known_case_evaluation.csv`
+## Proposed build order
 
-These outputs are already compatible with [src/dashboard/app.py](/D:/VSF/src/dashboard/app.py).
+Thứ tự triển khai để tránh scope creep:
+
+1. Build pair stats
+2. Run weighted edge outlier detection
+3. Run bipartite concentration scoring
+4. Define suspicious pair criteria
+5. Build suspicious graph
+6. Run WCC
+7. Materialize pair/component evidence xuống order level
+
+## Role của operational signals
+
+`ghost_rate`, `min_gap_min`, và `route reuse` vẫn phù hợp với bài toán ghost-trip, nhưng trong Sprint 2 chúng nên được xếp là:
+
+- enrichment signals
+- tie-breaker signals
+- explainability signals
+
+Không nên dùng chung để định nghĩa graph scope chính.
+
+## Success criteria
+
+Sprint 2 được xem là đạt hướng đúng nếu:
+
+- pair-level detection trở thành trung tâm pipeline
+- 3 graph algorithms cốt lõi đã được định nghĩa rõ
+- suspicious components có thể được xuất ra để mở case điều tra
+- các signal ngoài core được đặt đúng vị trí là enrichment
+
+## Final note
+
+Nếu cần giảm scope để đảm bảo tiến độ, thứ tự ưu tiên tuyệt đối trong Sprint 2 là:
+
+1. `Weighted edge outlier detection`
+2. `Bipartite concentration scoring`
+3. `WCC`
+
